@@ -12,8 +12,8 @@ Midnight 위에서 두 AI 에이전트가 서로의 가격 한도를 공개하�
 - [x] Compact devtools 설치 (`compact 0.5.1`)
 - [x] Counter 예제 컴파일러 고정 (`compact compile 0.30.0`)
 - [x] Counter 계약 build 및 테스트 3개 통과
-- [ ] De-Butler 계약 회로
-- [ ] 두 에이전트 릴레이 데모
+- [x] De-Butler 계약 회로와 5개 시뮬레이터 테스트
+- [x] 두 규칙 기반 에이전트 in-memory relay 데모
 - [ ] 선택적 LLM 어댑터
 
 구현 계획은 [`docs/superpowers/plans/2026-07-22-debutler-mvp.md`](docs/superpowers/plans/2026-07-22-debutler-mvp.md)에 있습니다.
@@ -188,6 +188,8 @@ docker run -p 6300:6300 \
 ```bash
 npm run demo
 ```
+
+현재 `npm run demo`는 두 규칙 기반 에이전트의 협상만 실행합니다. 다음 단계에서 협상 성공 뒤 Midnight simulator의 `authorizeHiddenPrice`와 `settle`을 연결합니다.
 
 기대 결과:
 

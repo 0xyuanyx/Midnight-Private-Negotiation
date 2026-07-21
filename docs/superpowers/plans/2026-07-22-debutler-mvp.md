@@ -82,7 +82,7 @@
 
 **Interfaces:**
 - `Contract<DebutlerPrivateState>` generated from `debutler.compact`.
-- Exported circuits: `authorizeHiddenPrice(): []`, `settle(): []`, and `cancel(): []`.
+- Exported circuits: `authorizeHiddenPrice(): []`, `settle(): []`, `cancelAsBuyer(): []`, and `cancelAsSeller(): []`.
 - Witness names: `buyerSecretKey`, `sellerSecretKey`, `buyerMaxPrice`, `buyerLimitRandomness`, `agreedPrice`, `priceRandomness`, `sellerMinPrice`, `sellerLimitRandomness`.
 
 - [ ] **Step 1: Write failing simulator tests**
@@ -162,17 +162,16 @@
 ### Task 3: Add the deterministic two-agent relay demo
 
 **Files:**
-- Create: `agents/shared/protocol.ts`
-- Create: `agents/shared/messages.ts`
+- Create: `agents/protocol.ts`
 - Create: `agents/relay.ts`
 - Create: `agents/buyer.ts`
 - Create: `agents/seller.ts`
-- Create: `agents/policy.ts`
+- Create: `agents/demo.ts`
 - Create: `agents/demo.test.ts`
 - Modify: `package.json`
 
 **Interfaces:**
-- `NegotiationMessage` discriminated union with `DEAL_OPEN`, `OFFER`, `COUNTER_OFFER`, `ACCEPT`, `AUTHORIZATION_SUBMITTED`, `PRICE_OPENING`, `SETTLE_SUBMITTED`, and `CANCELLED`.
+- `NegotiationMessage` discriminated union with `DEAL_OPEN`, `OFFER`, `COUNTER_OFFER`, `ACCEPT`, and `CANCELLED`.
 - `BuyerAgent(maxPrice: bigint)` and `SellerAgent(minPrice: bigint)` with `receive(message)` and `nextAction()` methods.
 - `Relay` forwards messages without inspecting or changing protocol fields.
 
@@ -185,7 +184,7 @@
   Run:
 
   ```bash
-  npm test -- --run agents/shared/agents/demo.test.ts
+  npm run test:agents
   ```
 
 - [ ] **Step 3: Implement the relay and rule-based agents**

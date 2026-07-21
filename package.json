@@ -3,6 +3,10 @@
   "version": "2.1.1",
   "private": true,
   "type": "module",
+  "scripts": {
+    "test:agents": "vitest run agents/demo.test.ts",
+    "demo": "node --experimental-strip-types agents/demo.ts"
+  },
   "workspaces": [
     "counter-cli",
     "contract"
