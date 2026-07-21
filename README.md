@@ -1,242 +1,227 @@
-# Counter DApp
+# De-Butler
 
-This project is built on the [Midnight Network](https://midnight.network/).
+> **집사들은 패를 깔지 않는다. 약속한 한도 안에서 거래했다는 영수증만 깐다.**
 
-[![Generic badge](https://img.shields.io/badge/Compact%20Toolchain-0.28.0-1abc9c.svg)](https://shields.io/) [![Generic badge](https://img.shields.io/badge/TypeScript-5.8.3-blue.svg)](https://shields.io/)
+Midnight 위에서 두 AI 에이전트가 서로의 가격 한도를 공개하지 않고 거래 조건을 협상하는 DApp 프로토타입입니다.
 
-A Midnight smart contract example demonstrating a simple on-chain counter. The counter uses public ledger state and serves as a starting point for building Midnight DApps.
+이 프로젝트의 핵심은 AI 채팅이 아닙니다. 각 에이전트가 사전에 정한 비공개 정책을 바꾸지 않았고, 최종 가격이 양쪽 조건 안에 들어간다는 사실을 Midnight의 ZK 증명으로 검증하는 것입니다.
 
-Supports three network targets:
+## 현재 상태
 
-| Network | Description | Command |
-|---------|-------------|---------|
-| **Preprod** | Public testnet (recommended for getting started) | `npm run preprod-ps` |
-| **Preview** | Public preview testnet | `npm run preview-ps` |
-| **Standalone** | Fully local (node + indexer + proof server via Docker) | `npm run standalone` |
+- [x] Midnight Counter 예제 scaffold
+- [x] Compact devtools 설치 (`compact 0.5.1`)
+- [x] Counter 예제 컴파일러 고정 (`compact compile 0.30.0`)
+- [x] Counter 계약 build 및 테스트 3개 통과
+- [ ] De-Butler 계약 회로
+- [ ] 두 에이전트 릴레이 데모
+- [ ] 선택적 LLM 어댑터
 
+구현 계획은 [`docs/superpowers/plans/2026-07-22-debutler-mvp.md`](docs/superpowers/plans/2026-07-22-debutler-mvp.md)에 있습니다.
 
-> **Use this repo as a template. Do not fork it.**
->  
-> This repository is intended to be used via GitHub’s “Use this template” flow.  
-> Forking this repo is discouraged, as forks are not tracked as independent projects.
+## 왜 Midnight인가
 
-## Project Structure
+일반적인 암호화 채팅만으로도 두 에이전트는 서로의 한도를 숨길 수 있습니다. 하지만 거래 상대방과 체인은 다음 사실을 확인할 수 없습니다.
 
+> 이 에이전트가 사전에 약속한 정책 한도를 지키고 있는가?
+
+De-Butler는 한도 자체를 공개하지 않고 다음만 증명합니다.
+
+```text
+구매자 최대가 B, 판매자 최소가 S, 합의가 p
+
+p <= B
+S <= p
 ```
-example-counter/
-├── contract/                          # Smart contract (Compact language)
-│   ├── src/counter.compact            # The counter smart contract
-│   └── src/test/                      # Contract unit tests
-└── counter-cli/                       # Command-line interface
-    ├── src/                           # CLI implementation
-    ├── proof-server.yml               # Proof server Docker config (preprod/preview)
-    ├── standalone.yml                 # Full local stack Docker config
-    └── standalone.env.example         # Default env vars for standalone mode
+
+## 프로토콜
+
+### 1. `createDeal`
+
+두 에이전트는 각자 한도를 랜덤성과 함께 commitment로 고정합니다.
+
+```text
+C_B = Commit(dealId, buyerKey, B, rB)
+C_S = Commit(dealId, sellerKey, S, rS)
 ```
 
-## Prerequisites
+체인에는 `C_B`, `C_S`만 기록됩니다. 실제 `B`, `S`, `rB`, `rS`는 각 에이전트의 witness에 남습니다.
 
-- [Node.js v22.15+](https://nodejs.org/) — `node --version` to check
-- [Docker](https://docs.docker.com/get-docker/) with `docker compose` — used for the local proof server
+### 2. `authorizeHiddenPrice`
 
-### Compact Developer Tools (devtools)
+구매자 에이전트는 협상 가격 `p`를 witness로 사용해 다음을 증명합니다.
 
-The Compact devtools manage and invoke the Compact toolchain (compiler, formatter, fixup tool, etc.).
+```text
+Commit(dealId, buyerKey, B, rB) == C_B
+p <= B
+```
 
-Install the devtools and toolchain:
+성공하면 체인에는 가격 자체가 아니라 다음 가격 commitment만 저장됩니다.
+
+```text
+C_P = Commit(dealId, p, rP)
+```
+
+### 3. `settle`
+
+판매자 에이전트는 `p`, `rP`, `S`, `rS`를 자기 witness로 넣어 다음을 증명합니다.
+
+```text
+Commit(dealId, p, rP) == C_P
+Commit(dealId, sellerKey, S, rS) == C_S
+S <= p
+```
+
+모든 검증이 끝난 뒤에만 `p`를 `disclose`하고 거래 상태를 `SETTLED`로 변경합니다.
+
+## 에이전트 연결 구조
+
+```text
+Buyer Agent ─────┐
+                 ├── WebSocket Relay ──┐
+Seller Agent ────┘                     │
+                                       ├── Midnight Contract
+Buyer Agent ───────────────────────────┘
+Seller Agent ──────────────────────────┘
+```
+
+각 에이전트는 로컬에서 다음을 보관합니다.
+
+- 자기 역할과 정책
+- 최대가 또는 최소가
+- commitment randomness
+- 호출자 인증 secret
+- Midnight witness provider
+- 자기 지갑과 private state
+
+Relay는 메시지를 전달할 뿐 계약을 대신 호출하지 않습니다. MVP에서는 Relay가 협상 가격과 메시지를 볼 수 있지만, 양쪽의 실제 한도는 보지 못합니다. 암호화된 에이전트 간 통신은 확장 항목입니다.
+
+## AI의 역할
+
+AI는 후보 제안가와 협상 문장을 생성합니다. 실제 한도 검사는 로컬 `PolicyGuard`와 Midnight 회로가 담당합니다.
+
+```text
+LLM이 후보 가격 생성
+        ↓
+로컬 PolicyGuard가 한도 검사
+        ↓
+통과한 메시지만 Relay로 전송
+        ↓
+정산 시 ZK 증명 생성
+```
+
+기본 데모는 API 키가 없어도 실행되는 규칙 기반 에이전트입니다. 필요할 때만 하나의 GPT API 또는 Claude API를 두 역할에 공용으로 연결할 수 있습니다. Claude Code는 개발 도구이며 런타임 에이전트가 아닙니다.
+
+## 증명하는 것과 증명하지 않는 것
+
+### 증명하는 것
+
+- 커밋된 구매자 한도와 판매자 한도를 나중에 바꾸지 않았음
+- 최종 가격이 양쪽 한도 안에 있음
+- 구매자와 판매자가 해당 deal의 역할을 보유함
+- 합의 전에는 가격을 공개하지 않음
+
+### 증명하지 않는 것
+
+- 한도가 실제 사용자의 진짜 예산인지
+- 구매자가 실제로 지불할 자산을 보유했는지
+- 판매자가 실제 상품을 보유했는지
+- AI가 합리적인 정책을 선택했는지
+- Relay가 협상 메시지를 보거나 지연시키지 않았는지
+
+현업 버전에서는 사용자 서명 기반 권한 위임, shielded escrow, 상품/재고 attestation, 암호화 릴레이를 추가해야 합니다.
+
+## MVP 범위
+
+### 포함
+
+- Compact 계약과 로컬 시뮬레이터
+- `createDeal → authorizeHiddenPrice → settle` 흐름
+- 성공·실패·잘못된 가격 opening 테스트
+- 두 개의 규칙 기반 에이전트
+- WebSocket 또는 in-memory relay
+- 합의 가격만 공개하는 데모
+
+### 제외
+
+- 실제 토큰 결제와 원자적 자산 교환
+- 외부 MPC 또는 proof aggregation
+- LLM API 필수화
+- 자동 온체인 시간 만료가 확인되기 전의 강제 expiry 주장
+- 에이전트의 솔벤시·재고·정책 진실성 증명
+
+## 실행 환경
+
+```text
+Node.js 24
+npm 11
+Compact devtools 0.5.1
+Compact compiler 0.30.0
+Docker Desktop
+```
+
+현재 Counter scaffold가 사용하는 runtime 0.15.0과의 호환성을 위해 첫 구현은 Compact compiler 0.30.0을 사용합니다.
+
+### 계약만 검증
 
 ```bash
-# Install the Compact devtools
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
-
-# Add to PATH
-source $HOME/.local/bin/env
-
-# Install the toolchain version used by this project
-compact update 0.30.0
-
-# Verify
-compact compile --version
-```
-
-> If you already have the devtools installed, run `compact self update` to get the latest version. If you encounter issues, `compact clean` will reset your `.compact` directory.
-
-## Quick Start (Preprod)
-
-### 1. Install dependencies
-
-```bash
+cd /Users/taemin/Developer/Midnight/midnight-counter
+export PATH="/Users/taemin/.local/bin:$PATH"
 npm install
-```
-
-### 2. Build the smart contract
-
-```bash
 cd contract
 npm run compact
 npm run build
-npm run test
-cd ..
+npm run typecheck
+npm run lint
+npm test -- --run
 ```
 
-Expected output from `npm run compact`:
-
-```
-Compiling 1 circuits:
-  circuit "increment" (k=10, rows=29)
-```
-
-The first run may download zero-knowledge parameters (~500MB). This is a one-time download.
-
-### 3. Run the DApp
-
-Option A — **auto-start proof server** (recommended):
+### proof server
 
 ```bash
-cd counter-cli
-npm run preprod-ps
+docker run -p 6300:6300 \
+  midnightntwrk/proof-server:latest \
+  midnight-proof-server -v
 ```
 
-This pulls the proof server Docker image, starts it, and launches the CLI.
-
-Option B — **manual proof server** (if you prefer to manage it yourself):
-
-Start the proof server in a separate terminal:
+### 전체 데모 목표
 
 ```bash
-cd counter-cli
-docker compose -f proof-server.yml up
+npm run demo
 ```
 
-Wait for it to start — you should see:
+기대 결과:
 
-```
-INFO actix_server::server: starting service: "actix-web-service-0.0.0.0:6300", workers: 24, listening on: 0.0.0.0:6300
-```
+```text
+BUYER  max=110  ── offer 100 ──┐
+SELLER min=95   ── accept 100 ─┘
 
-Then in another terminal:
-
-```bash
-cd counter-cli
-npm run preprod
+Buyer proof:  PASS
+Seller proof: PASS
+Public result: price=100, limits=hidden
 ```
 
-## Using the Counter DApp
+## 8일 진행 계획
 
-### Step 1: Create a wallet
+| 기간 | 목표 |
+|---|---|
+| 1일차 | 환경 고정, Counter 회로 이해, README/계획 확정 |
+| 2일차 | commitment·witness·`disclose` 회로와 단위 테스트 |
+| 3일차 | buyer/seller caller binding과 실패 케이스 |
+| 4일차 | 두 에이전트와 relay 연결 |
+| 5일차 | 성공·결렬 데모와 proof latency 측정 |
+| 6일차 | 선택적 LLM adapter 또는 대사 연출 |
+| 7일차 | 발표 자료·아키텍처·위협 모델 정리 |
+| 8일차 | 리허설, 녹화 백업, 전체 회귀 테스트 |
 
-The CLI uses a headless wallet (separate from browser wallets like Lace).
+## 핵심 발표 문장
 
-1. Choose option **[1]** to create a new wallet
-2. The system generates a wallet seed and displays your addresses:
+> **AI는 협상하고, Midnight는 AI가 약속한 한도를 넘지 않았음을 증명한다.**
 
-```
-──────────────────────────────────────────────────────────────
-  Wallet Overview                            Network: preprod
-──────────────────────────────────────────────────────────────
-  Seed: <64-character hex string>
+## 참고 자료
 
-  Unshielded Address (send tNight here):
-  mn_addr_preprod1...
-──────────────────────────────────────────────────────────────
-```
-
-**Save the seed** — you'll need it to restore the wallet later.
-
-### Step 2: Fund your wallet
-
-1. Copy your **unshielded address** (`mn_addr_preprod1...`) from the output
-2. Visit the [Preprod faucet](https://faucet.preprod.midnight.network)
-3. Paste your address and request tNight tokens
-4. The CLI will detect incoming funds automatically
-
-### Step 3: Wait for DUST
-
-After receiving tNight, the CLI automatically registers your NIGHT UTXOs for dust generation. DUST is the non-transferable fee resource required for all transactions on Midnight.
-
-The CLI shows progress:
-
-```
-  ✓ Registering 1 NIGHT UTXO(s) for dust generation
-  ✓ Waiting for dust to generate
-  ✓ Configuring providers
-```
-
-Once DUST is available, the contract menu appears with your balance:
-
-```
-──────────────────────────────────────────────────────────────
-  Contract Actions                    DUST: 405,083,000,000,000
-──────────────────────────────────────────────────────────────
-  [1] Deploy a new counter contract
-  [2] Join an existing counter contract
-  [3] Monitor DUST balance
-  [4] Exit
-```
-
-### Step 4: Deploy a counter contract
-
-1. Choose option **[1]** to deploy
-2. Wait for proving, balancing, and submission
-3. The contract address is displayed on success:
-
-```
-  ✓ Deploying counter contract
-  Contract deployed at: <contract address>
-```
-
-**Save the contract address** to rejoin the contract in future sessions.
-
-### Step 5: Interact with your contract
-
-After deployment, the counter menu appears:
-
-- **[1] Increment counter** — submits a transaction to increment the on-chain counter
-- **[2] Display current counter value** — queries the blockchain for the current value
-- **[3] Exit**
-
-Each increment creates a real transaction on Midnight Preprod.
-
-### Returning to an existing wallet and contract
-
-Next time you run the DApp:
-
-1. Choose option **[2]** to restore wallet from seed
-2. Enter your saved seed
-3. Wait for sync and DUST generation
-4. Choose option **[2]** to join existing contract
-5. Enter your saved contract address
-
-## Monitoring DUST Balance
-
-The contract menu includes a DUST monitor (option **[3]**) that shows a live-updating display:
-
-```
-  [10:20:03 PM] DUST: 471,219,000,000,000 (1 coins, 0 pending) | NIGHT: 1 UTXOs, 1 registered | ✓ ready to deploy
-```
-
-This is useful for:
-- Checking if you have enough DUST before deploying
-- Monitoring DUST generation after registering NIGHT
-- Diagnosing issues where DUST appears locked (pending coins from failed transactions)
-
-## Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| `compact: command not found` | Run `source $HOME/.local/bin/env` to add it to your PATH. |
-| `connect ECONNREFUSED 127.0.0.1:6300` | Start the proof server: `cd counter-cli && docker compose -f proof-server.yml up` |
-| Proof server hangs on Mac ARM (Apple Silicon) | In Docker Desktop: Settings → General → "Virtual Machine Options" → select **Docker VMM**. Restart Docker after changing. |
-| `Failed to clone intent` during deploy | Wallet SDK signing bug — already worked around in this codebase. If you see this, ensure you're running the latest code. See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) Section 4. |
-| DUST balance drops to 0 after failed deploy | Known wallet SDK issue. Restart the DApp to release locked DUST coins. |
-| Wallet shows 0 balance after faucet | Wait for sync to complete. If still 0, check that you sent to the correct unshielded address. |
-| Could not find a working container runtime strategy | Docker isn't running. Start Docker and try again. |
-| Tests fail with "Cannot find module" | Build the contract first: `cd contract && npm run compact && npm run build` |
-| Node.js warnings about experimental features | Normal — these don't affect functionality. |
-
-## Useful Links
-
-- [Preprod Faucet](https://faucet.preprod.midnight.network) — Get preprod tNight tokens
-- [Midnight Documentation](https://docs.midnight.network/) — Developer guide
-- [Compact Language Guide](https://docs.midnight.network/compact) — Smart contract language reference
-- [Migration Guide](MIGRATION_GUIDE.md) — Detailed guide for migrating to Preprod with midnight-js 3.0.0 and wallet-sdk-facade 1.0.0
+- [Midnight Developer Documentation](https://docs.midnight.network/)
+- [Compact contract examples](https://docs.midnight.network/examples/contracts)
+- [Private Reserve Auction](https://docs.midnight.network/examples/contracts/private-reserve-auction)
+- [ZK Loan DApp](https://docs.midnight.network/examples/dapps/zkloan)
+- [Private data and commitments](https://docs.midnight.network/concepts/how-midnight-works/keeping-data-private)
+- [Transaction building blocks](https://docs.midnight.network/concepts/how-midnight-works/building-blocks)
