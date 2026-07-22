@@ -33,6 +33,7 @@ AI 에이전트는 기술의 주인공이 아니라 기술을 직관적으로 �
 - [x] 계약 시뮬레이터 테스트 5개 통과
 - [x] 두 규칙 기반 에이전트와 in-memory relay 테스트 2개 통과
 - [x] Docker Proof Server 이미지 다운로드 및 `6300` 포트 기동 확인
+- [x] Python 2터미널 relay 데모와 KRW 천 단위 출력
 - [ ] Midnight.js proof provider와 실제 contract call 연결
 - [ ] 협상 성공 뒤 실제 `authorizeHiddenPrice → settle` 증명 생성
 - [ ] 선택적 LLM 어댑터
@@ -229,6 +230,38 @@ docker ps --filter name=midnight-proof-server
 
 Proof Server가 실행 중이어도 현재 `npm run demo`가 자동으로 Proof Server를 호출하는 것은 아닙니다. Proof provider 연결은 다음 구현 단계입니다.
 
+### Python 터미널 이해용 데모
+
+Python 데모는 실제 Midnight 증명이 아니라, 구매자·판매자·중간 Relay가 어떻게 연결되는지 보여주는 학습용 프로토타입입니다. 세 터미널을 열고 실행합니다.
+
+```bash
+cd /Users/taemin/Developer/Midnight/midnight-counter
+python3 python_demo.py relay
+```
+
+```bash
+cd /Users/taemin/Developer/Midnight/midnight-counter
+python3 python_demo.py buyer
+```
+
+```bash
+cd /Users/taemin/Developer/Midnight/midnight-counter
+python3 python_demo.py seller
+```
+
+구매자는 상품 코드와 최대 예산만, 판매자는 상품 코드와 최소 판매가만 입력합니다. 첫 제안가는 구매자 에이전트의 고정 규칙으로 자동 결정되고, 출력 금액은 `110,000 KRW`처럼 표시됩니다.
+
+증명 순서는 실제 프로토콜과 동일한 모양으로 연출합니다.
+
+```text
+협상 완료
+  → 구매자 authorizeHiddenPrice 증명
+  → 판매자 settle 증명
+  → 최종 가격 공개
+```
+
+현재 화면의 `Midnight 시뮬레이션: ... PASS`는 실제 Proof Server 호출이 아니라 자리표시자입니다. 실제 연결 단계에서 이 부분을 Midnight.js contract call로 교체합니다.
+
 ### 전체 데모 목표
 
 ```bash
@@ -272,6 +305,30 @@ Public result: price=100, limits=hidden
 > **Midnight는 비밀을 숨기는 데서 끝나지 않고, 비밀을 공개하지 않은 채 조건을 증명하게 한다.**
 
 AI 에이전트 협상은 이 문장을 보여주는 사례 DApp입니다.
+
+## 이후 발전 방향
+
+### 1단계: 터미널 데모 다듬기
+
+- 입력 중인 비밀 금액을 화면에 남기지 않기
+- 구매자·판매자 터미널의 색상과 상태 구분
+- 증명 생성 중 spinner와 실제 latency 표시
+- 성공·반대 제안·결렬 시나리오를 한 명령으로 재생
+
+### 2단계: 실제 Midnight 연결
+
+- `Midnight 시뮬레이션` 출력을 실제 Proof Server 호출로 교체
+- `authorizeHiddenPrice → settle` contract call 실행
+- 공개 ledger에는 commitment·상태·최종 가격만 표시
+
+### 3단계: 채팅형 DApp 화면
+
+- 브라우저에서 구매자·판매자 대화창을 좌우 패널로 분리
+- 가운데에 공개 협상 상태와 최종 settlement 영수증 표시
+- 각 에이전트의 한도는 해당 패널에서도 마스킹
+- Relay·Proof Server·Contract 상태를 별도 아키텍처 패널로 표시
+
+발표 준비에서는 1단계와 2단계를 먼저 완성하고, 시간이 남으면 3단계의 채팅형 화면을 추가합니다. 채팅 UI가 추가되어도 발표의 주제는 여전히 DApp이 아니라 Midnight의 비공개 조건 증명입니다.
 
 ## 참고 자료
 

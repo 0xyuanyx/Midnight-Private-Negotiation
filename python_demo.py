@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+"""Two-terminal De-Butler negotiation demo.
+
+This is a learning prototype for the presentation flow. It does not call
+Midnight yet; the two [Mock ZK] messages mark where the real contract calls
+will be connected later.
+
+Run in three terminals:
+  python3 python_demo.py relay
+  python3 python_demo.py buyer
+  python3 python_demo.py seller
+"""
+
+from __future__ import annotations
+
+import json
+import socket
+import socketserver
+import sys
+import time
+from dataclasses import dataclass
+from typing import Any
+
+HOST = "127.0.0.1"
+PORT = 8765
+
+
+def money(value: int | str) -> str:
+    return f"{int(value):,}"
+
+
+def read_money(prompt: str) -> int:
+    while True:
+        try:
+            value = int(input(prompt).replace(",", "").strip())
+            if value < 0:
+                raise ValueError
+            return value
+        except ValueError:
+            print("숫자만 입력해 주세요. 예: 110000")
+
+
+def choose_opening_offer(max_price: int) -> int:
+    """Simple deterministic buyer policy for the teaching demo."""
+    return max(0, max_price - 10_000)
+
+
+def show_progress(message: str, cycles: int = 2) -> None:
+    """Small terminal animation for a visibly ongoing negotiation/proof step."""
+    for _ in range(cycles):
+        for dots in (".", "..", "..."):
+            sys.stdout.write(f"\r{message}{dots:<3}")
+            sys.stdout.flush()
+            time.sleep(0.18)
+    sys.stdout.write("\r" + " " * (len(message) + 3) + "\r")
+    sys.stdout.flush()
+
+
+def send_line(sock: socket.socket, message: dict[str, Any]) -> None:
+    sock.sendall((json.dumps(message) + "\n").encode())
+
+
+def receive_lines(sock: socket.socket):
+    buffer = ""
+    while True:
+        chunk = sock.recv(4096)
+        if not chunk:
+            return
+        buffer += chunk.decode()
+        while "\n" in buffer:
+            line, buffer = buffer.split("\n", 1)
+            if line:
+                yield json.loads(line)
+
+
+class RelayState:
+    def __init__(self) -> None:
+        self.clients: dict[str, socketserver.StreamRequestHandler] = {}
+        self.lock = __import__("threading").Lock()
+
+
+relay_state = RelayState()
+
+
+class RelayHandler(socketserver.BaseRequestHandler):
+    def handle(self) -> None:
+        file = self.request.makefile("r", encoding="utf-8")
+        role = None
+        try:
+            for line in file:
+                message = json.loads(line)
+                if message["type"] == "HELLO":
+                    role = message["role"]
+                    with relay_state.lock:
+                        relay_state.clients[role] = self
+                        print(f"[Relay] {role} connected", flush=True)
+                        if "buyer" in relay_state.clients and "seller" in relay_state.clients:
+                            self.broadcast({"type": "READY"})
+                    continue
+
+                target = "seller" if message.get("from") == "buyer" else "buyer"
+                with relay_state.lock:
+                    recipient = relay_state.clients.get(target)
+                    if recipient is not None:
+                        recipient.request.sendall((json.dumps(message) + "\n").encode())
+        finally:
+            if role:
+                with relay_state.lock:
+                    relay_state.clients.pop(role, None)
+                print(f"[Relay] {role} disconnected", flush=True)
+
+    @staticmethod
+    def broadcast(message: dict[str, Any]) -> None:
+        payload = (json.dumps(message) + "\n").encode()
+        for client in relay_state.clients.values():
+            client.request.sendall(payload)
+
+
+class RelayServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+
+
+def run_relay() -> None:
+    with RelayServer((HOST, PORT), RelayHandler) as server:
+        print(f"Relay Server가 {HOST}:{PORT}에서 대기 중입니다.", flush=True)
+        print("구매자와 판매자 터미널을 각각 실행하세요.", flush=True)
+        server.serve_forever()
+
+
+@dataclass
+class BuyerConfig:
+    product: str
+    max_price: int
+    opening_offer: int
+
+
+@dataclass
+class SellerConfig:
+    product: str
+    min_price: int
+
+
+def connect(role: str) -> socket.socket:
+    sock = socket.create_connection((HOST, PORT))
+    send_line(sock, {"type": "HELLO", "role": role})
+    return sock
+
+
+def run_buyer() -> None:
+    print("=== 구매자 터미널 ===\n")
+    product = input("상품 코드: ").strip()
+    max_price = read_money("최대 예산(KRW): ")
+    opening_offer = choose_opening_offer(max_price)
+    config = BuyerConfig(product, max_price, opening_offer)
+
+    with connect("buyer") as sock:
+        print("\n구매자 조건을 저장했습니다. 판매자 연결을 기다리는 중...\n")
+        for message in receive_lines(sock):
+            if message["type"] == "READY":
+                print("협상을 시작합니다.\n")
+                show_progress("협상이 진행되고 있습니다")
+                send_line(sock, {"type": "OFFER", "from": "buyer", "product": config.product, "price": config.opening_offer})
+            elif message["type"] == "COUNTER":
+                price = int(message["price"])
+                print(f"상대방의 반대 제안: {money(price)} KRW")
+                if price <= config.max_price:
+                    show_progress("협상이 진행되고 있습니다")
+                    print(f"{money(price)} KRW 수락\n")
+                    send_line(sock, {"type": "ACCEPT", "from": "buyer", "price": price})
+                else:
+                    print("예산을 초과해 협상이 결렬되었습니다.\n")
+                    send_line(sock, {"type": "CANCEL", "from": "buyer"})
+            elif message["type"] == "ACCEPT":
+                price = int(message["price"])
+                print(f"상대방이 {money(price)} KRW를 수락했습니다.\n")
+                show_progress("구매자 조건을 증명하는 중")
+                print("Midnight 시뮬레이션: 구매자 조건 증명 PASS\n")
+                send_line(sock, {"type": "AUTHORIZED", "from": "buyer", "price": price})
+            elif message["type"] == "SETTLED":
+                print("거래가 체결되었습니다.")
+                print(f"최종 합의 가격: {money(message['price'])} KRW")
+                print("공개 상태: 구매자 예산 비공개 / 판매자 최소가 비공개")
+                return
+            elif message["type"] == "CANCEL":
+                print("협상이 결렬되었습니다.")
+                return
+
+
+def run_seller() -> None:
+    print("=== 판매자 터미널 ===\n")
+    product = input("상품 코드: ").strip()
+    min_price = read_money("최소 판매가(KRW): ")
+    config = SellerConfig(product, min_price)
+
+    with connect("seller") as sock:
+        print("\n판매 조건을 저장했습니다. 구매자 연결을 기다리는 중...\n")
+        for message in receive_lines(sock):
+            if message["type"] == "OFFER":
+                if message["product"] != config.product:
+                    print("상품 코드가 달라 협상을 종료합니다.")
+                    send_line(sock, {"type": "CANCEL", "from": "seller"})
+                    return
+                price = int(message["price"])
+                show_progress("협상이 진행되고 있습니다")
+                print(f"상대방의 제안: {money(price)} KRW")
+                if price >= config.min_price:
+                    print(f"{money(price)} KRW 수락\n")
+                    send_line(sock, {"type": "ACCEPT", "from": "seller", "price": price})
+                else:
+                    print(f"반대 제안을 보냅니다: {money(config.min_price)} KRW")
+                    send_line(sock, {"type": "COUNTER", "from": "seller", "price": config.min_price})
+            elif message["type"] == "ACCEPT":
+                price = int(message["price"])
+                print(f"상대방이 {money(price)} KRW를 수락했습니다.")
+                print("구매자의 조건 증명 제출을 기다리는 중...\n")
+                send_line(sock, {"type": "ACCEPT", "from": "seller", "price": price})
+            elif message["type"] == "AUTHORIZED":
+                print("구매자 조건 증명을 확인했습니다.")
+                show_progress("판매자 조건을 증명하는 중")
+                print("Midnight 시뮬레이션: 판매자 조건 증명 PASS\n")
+                send_line(sock, {"type": "SETTLED", "from": "seller", "price": message["price"]})
+                print("거래가 체결되었습니다.")
+                print(f"최종 합의 가격: {money(message['price'])} KRW")
+                print("공개 상태: 구매자 예산 비공개 / 판매자 최소가 비공개")
+                return
+            elif message["type"] == "CANCEL":
+                print("협상이 결렬되었습니다.")
+                return
+
+
+def main() -> None:
+    if len(sys.argv) != 2 or sys.argv[1] not in {"relay", "buyer", "seller"}:
+        print("사용법: python3 python_demo.py [relay|buyer|seller]")
+        raise SystemExit(2)
+    {"relay": run_relay, "buyer": run_buyer, "seller": run_seller}[sys.argv[1]]()
+
+
+if __name__ == "__main__":
+    main()

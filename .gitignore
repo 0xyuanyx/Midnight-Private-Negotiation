@@ -61,3 +61,7 @@ jspm_packages/
 
 # Compact
 managed/
+
+# Python demo cache
+__pycache__/
+*.py[cod]
