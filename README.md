@@ -39,6 +39,8 @@ AI 에이전트는 기술의 주인공이 아니라 기술을 직관적으로 �
 
 구현 계획은 [`docs/superpowers/plans/2026-07-22-debutler-mvp.md`](docs/superpowers/plans/2026-07-22-debutler-mvp.md)에 있습니다.
 
+참고로 `counter-cli/`는 원본 Counter scaffold의 wallet·Midnight.js 연결 코드를 참고하기 위해 남겨둔 디렉터리입니다. 현재 발표 데모의 실행 경로는 루트의 `agents/`와 `contract/`이며, `counter-cli`는 아직 De-Butler 계약용으로 전환하지 않았습니다.
+
 ## 왜 Midnight인가
 
 일반적인 암호화 채팅만으로도 두 에이전트는 서로의 한도를 숨길 수 있습니다. 하지만 거래 상대방과 체인은 다음 사실을 확인할 수 없습니다.
