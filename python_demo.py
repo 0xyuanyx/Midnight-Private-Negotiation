@@ -140,7 +140,13 @@ class SellerConfig:
 
 
 def connect(role: str) -> socket.socket:
-    sock = socket.create_connection((HOST, PORT))
+    try:
+        sock = socket.create_connection((HOST, PORT))
+    except ConnectionRefusedError:
+        print("\nRelay Server에 연결할 수 없습니다.")
+        print("먼저 다른 터미널에서 다음 명령을 실행하세요:")
+        print("  python3 python_demo.py relay\n")
+        raise SystemExit(1)
     send_line(sock, {"type": "HELLO", "role": role})
     return sock
 
