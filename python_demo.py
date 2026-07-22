@@ -13,6 +13,7 @@ Run in three terminals:
 from __future__ import annotations
 
 import json
+import secrets
 import socket
 import socketserver
 import sys
@@ -41,7 +42,8 @@ def read_money(prompt: str) -> int:
 
 def choose_opening_offer(max_price: int) -> int:
     """Simple deterministic buyer policy for the teaching demo."""
-    return max(0, max_price - 10_000)
+    rounded = (max_price * 90 // 100) // 1_000 * 1_000
+    return max(1_000, rounded)
 
 
 def show_progress(message: str, cycles: int = 2) -> None:
@@ -161,6 +163,19 @@ def run_buyer(product: str) -> None:
         print("\n구매자 조건을 저장했습니다. 판매자 연결을 기다리는 중...\n")
         for message in receive_lines(sock):
             if message["type"] == "READY":
+                show_progress("구매자 commitment를 생성하는 중")
+                print("온체인 시뮬레이션: createDeal(C_B) 완료\n")
+                send_line(
+                    sock,
+                    {
+                        "type": "CREATE_DEAL",
+                        "from": "buyer",
+                        "product": config.product,
+                        "buyer_commitment": "C_B",
+                    },
+                )
+            elif message["type"] == "DEAL_JOINED":
+                print("판매자가 딜에 합류했습니다.\n")
                 print("협상을 시작합니다.\n")
                 show_progress("협상이 진행되고 있습니다")
                 send_line(sock, {"type": "OFFER", "from": "buyer", "product": config.product, "price": config.opening_offer})
@@ -178,8 +193,18 @@ def run_buyer(product: str) -> None:
                 price = int(message["price"])
                 print(f"상대방이 {money(price)} KRW를 수락했습니다.\n")
                 show_progress("구매자 조건을 증명하는 중")
-                print("Midnight 시뮬레이션: 구매자 조건 증명 PASS\n")
-                send_line(sock, {"type": "AUTHORIZED", "from": "buyer", "price": price})
+                print("온체인 시뮬레이션: authorizeHiddenPrice PASS")
+                print("가격 commitment C_P가 저장되었습니다.\n")
+                print("오프체인 시뮬레이션: (p, r_P)를 판매자에게 전달했습니다.\n")
+                send_line(
+                    sock,
+                    {
+                        "type": "AUTHORIZED",
+                        "from": "buyer",
+                        "price": price,
+                        "price_opening": secrets.token_hex(8),
+                    },
+                )
             elif message["type"] == "SETTLED":
                 print("거래가 체결되었습니다.")
                 print(f"최종 합의 가격: {money(message['price'])} KRW")
@@ -198,7 +223,15 @@ def run_seller(product: str) -> None:
     with connect("seller") as sock:
         print("\n판매 조건을 저장했습니다. 구매자 연결을 기다리는 중...\n")
         for message in receive_lines(sock):
-            if message["type"] == "OFFER":
+            if message["type"] == "CREATE_DEAL":
+                if message["product"] != config.product:
+                    print("상품 코드가 달라 딜에 합류하지 않습니다.")
+                    send_line(sock, {"type": "CANCEL", "from": "seller"})
+                    return
+                show_progress("판매자 commitment를 생성하는 중")
+                print("온체인 시뮬레이션: joinDeal(C_S) 완료\n")
+                send_line(sock, {"type": "DEAL_JOINED", "from": "seller", "product": config.product})
+            elif message["type"] == "OFFER":
                 if message["product"] != config.product:
                     print("상품 코드가 달라 협상을 종료합니다.")
                     send_line(sock, {"type": "CANCEL", "from": "seller"})
@@ -219,8 +252,9 @@ def run_seller(product: str) -> None:
                 send_line(sock, {"type": "ACCEPT", "from": "seller", "price": price})
             elif message["type"] == "AUTHORIZED":
                 print("구매자 조건 증명을 확인했습니다.")
+                print("오프체인 시뮬레이션: (p, r_P)를 수신했습니다.\n")
                 show_progress("판매자 조건을 증명하는 중")
-                print("Midnight 시뮬레이션: 판매자 조건 증명 PASS\n")
+                print("온체인 시뮬레이션: settle + disclose(p) PASS\n")
                 send_line(sock, {"type": "SETTLED", "from": "seller", "price": message["price"]})
                 print("거래가 체결되었습니다.")
                 print(f"최종 합의 가격: {money(message['price'])} KRW")
