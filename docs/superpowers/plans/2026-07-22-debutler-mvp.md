@@ -1,12 +1,14 @@
-# De-Butler MVP Implementation Plan
+# De-Butler MVP 및 발표 사례 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a deterministic, locally reproducible Midnight DApp that lets two role-based agents negotiate a price while keeping their committed maximum/minimum limits private and proving only policy compliance.
+**Goal:** Build a deterministic, locally reproducible Midnight 사례 DApp for the presentation **“Midnight에서 비밀을 공개하지 않고 조건을 증명하는 법”**. Two role-based agents negotiate a price while keeping their committed maximum/minimum limits private and proving only policy compliance.
 
-**Architecture:** Two local agent runtimes communicate through a dumb WebSocket relay. Each runtime keeps its own limit, randomness, identity secret, and witness provider; the relay transports negotiation messages and never calls the contract. The Compact contract stores public commitments and settlement status, proves the buyer's hidden price is below its committed maximum, then proves the seller accepts that same hidden price above its committed minimum before disclosing the final price.
+**Architecture:** Two local agent runtimes communicate through an in-memory relay in the MVP (a WebSocket relay is a future transport option). Each runtime keeps its own limit, randomness, caller secret, and witness provider; the relay transports negotiation messages and never calls the contract. The Compact contract stores public commitments and settlement status, proves the buyer's hidden price is below its committed maximum, then proves the seller accepts that same hidden price above its committed minimum before disclosing the final price.
 
-**Tech Stack:** Compact 0.30.0 for the scaffolded Counter repository, Midnight Compact runtime 0.15.0, TypeScript/Node.js 24, Vitest, Midnight.js adapters, WebSocket relay, Docker proof server. A future LLM adapter may call one provider API for both roles, but the MVP must work without an API key.
+**Tech Stack:** Compact 0.30.0 for the scaffolded Counter repository, Midnight Compact runtime 0.15.0, TypeScript/Node.js 24, Vitest, Midnight.js adapters, in-memory relay, Docker Proof Server on port 6300. A future LLM adapter may call one provider API for both roles, but the MVP must work without an API key.
+
+**Status (2026-07-22):** Environment, presentation framing, Compact contract, local simulator, deterministic agent relay, and Proof Server startup are verified. The next implementation task is connecting the generated contract to Midnight.js's proof provider and exercising a real `authorizeHiddenPrice → settle` call.
 
 ## Global Constraints
 
@@ -21,7 +23,7 @@
 
 ---
 
-### Task 1: Document the frozen design and runbook
+### Task 1: Document the frozen design and runbook — completed
 
 **Files:**
 - Create: `docs/superpowers/plans/2026-07-22-debutler-mvp.md`
@@ -30,7 +32,7 @@
 **Interfaces:**
 - Produces the protocol vocabulary used by all later tasks: `createDeal`, `authorizeHiddenPrice`, `settle`, `cancel`, `buyerCommitment`, `sellerCommitment`, `priceCommitment`, `finalPrice`.
 
-- [ ] **Step 1: Record the protocol invariants**
+- [x] **Step 1: Record the protocol invariants**
 
   Document the statements that must remain true:
 
@@ -41,11 +43,11 @@
   settle proves the same p commitment and minPrice <= p, then discloses p
   ```
 
-- [ ] **Step 2: Document the threat model and non-goals**
+- [x] **Step 2: Document the threat model and non-goals**
 
   State that the relay may observe messages, metadata remains visible, and the protocol does not prove that a limit is economically truthful.
 
-- [ ] **Step 3: Document local setup and verification commands**
+- [x] **Step 3: Document local setup and verification commands**
 
   Include the known-good baseline commands:
 
@@ -58,7 +60,7 @@
   cd contract && npm run compact && npm run build && npm test -- --run
   ```
 
-- [ ] **Step 4: Commit documentation**
+- [x] **Step 4: Commit documentation**
 
   Run:
 
@@ -67,7 +69,7 @@
   git commit -m "docs: freeze De-Butler MVP design and runbook"
   ```
 
-### Task 2: Convert the Counter contract into a minimal De-Butler contract
+### Task 2: Convert the Counter contract into a minimal De-Butler contract — completed
 
 **Files:**
 - Create: `contract/src/debutler.compact`
@@ -85,7 +87,7 @@
 - Exported circuits: `authorizeHiddenPrice(): []`, `settle(): []`, `cancelAsBuyer(): []`, and `cancelAsSeller(): []`.
 - Witness names: `buyerSecretKey`, `sellerSecretKey`, `buyerMaxPrice`, `buyerLimitRandomness`, `agreedPrice`, `priceRandomness`, `sellerMinPrice`, `sellerLimitRandomness`.
 
-- [ ] **Step 1: Write failing simulator tests**
+- [x] **Step 1: Write simulator tests**
 
   Add tests for these exact behaviors:
 
@@ -124,7 +126,7 @@
   });
   ```
 
-- [ ] **Step 2: Run the focused test and verify the expected failure**
+- [x] **Step 2: Run the focused test**
 
   Run:
 
@@ -133,13 +135,13 @@
   npm test -- --run src/test/debutler.test.ts
   ```
 
-  Expected result: FAIL because the generated De-Butler contract and simulator do not exist yet.
+  The initial red phase was completed before implementation; the focused suite now passes.
 
-- [ ] **Step 3: Implement the minimum Compact state and witness assertions**
+- [x] **Step 3: Implement the minimum Compact state and witness assertions**
 
   Use public randomized commitments and public status/final price. Keep `maxPrice`, `minPrice`, `price`, and all opening randomness in witness functions. `authorizeHiddenPrice` stores only `priceCommitment`; `settle` verifies the price commitment and seller bound before `disclose(price)`.
 
-- [ ] **Step 4: Run the focused test and verify it passes**
+- [x] **Step 4: Run the focused test and verify it passes**
 
   Run:
 
@@ -149,7 +151,7 @@
   npm test -- --run src/test/debutler.test.ts
   ```
 
-- [ ] **Step 5: Run all contract checks**
+- [x] **Step 5: Run all contract checks**
 
   Run:
 
@@ -159,7 +161,7 @@
   npm test -- --run
   ```
 
-### Task 3: Add the deterministic two-agent relay demo
+### Task 3: Add the deterministic two-agent relay demo — completed (in-memory MVP)
 
 **Files:**
 - Create: `agents/protocol.ts`
@@ -175,11 +177,11 @@
 - `BuyerAgent(maxPrice: bigint)` and `SellerAgent(minPrice: bigint)` with `receive(message)` and `nextAction()` methods.
 - `Relay` forwards messages without inspecting or changing protocol fields.
 
-- [ ] **Step 1: Write a failing protocol test**
+- [x] **Step 1: Write the protocol tests**
 
   Test a deterministic success flow with `maxPrice=110`, `minPrice=95`, and final price `100`, plus a rejection flow where `maxPrice=90`.
 
-- [ ] **Step 2: Verify the protocol test fails**
+- [x] **Step 2: Run the focused protocol tests**
 
   Run:
 
@@ -187,11 +189,11 @@
   npm run test:agents
   ```
 
-- [ ] **Step 3: Implement the relay and rule-based agents**
+- [x] **Step 3: Implement the relay and rule-based agents**
 
-  Keep the relay in-memory for tests and WebSocket-backed for the demo. Agent limits stay in local objects and are never put into messages.
+  Keep the relay in-memory for the MVP. Agent limits stay in local objects and are never put into messages. A real WebSocket transport is optional and not required for the presentation proof-of-concept.
 
-- [ ] **Step 4: Verify the protocol test passes**
+- [x] **Step 4: Verify the protocol test passes**
 
   Run the focused test, then:
 
@@ -201,7 +203,7 @@
 
   Expected output: one successful settlement and one rejected negotiation.
 
-### Task 4: Add the optional LLM adapter
+### Task 4: Add the optional LLM adapter — pending
 
 **Files:**
 - Create: `agents/llm/adapter.ts`
@@ -231,7 +233,7 @@
   npm run demo
   ```
 
-### Task 5: Add demo runbook, threat-model screen copy, and evidence
+### Task 5: Add demo runbook, threat-model screen copy, and evidence — in progress
 
 **Files:**
 - Modify: `README.md`
@@ -242,8 +244,8 @@
 - No runtime interface changes.
 
 - [ ] **Step 1: Document the exact success and failure scripts**
-- [ ] **Step 2: Document public/private data and relay visibility**
-- [ ] **Step 3: Document proof latency fallback and local proof-server commands**
+- [x] **Step 2: Document public/private data and relay visibility**
+- [x] **Step 3: Document proof latency fallback and local proof-server commands**
 - [ ] **Step 4: Run the complete verification suite and record outputs**
 
   ```bash
@@ -255,11 +257,12 @@
 
 ## Self-review checklist
 
-- [ ] Every public contract argument is intentionally public.
-- [ ] Every secret limit, price opening, and randomness value is a witness.
-- [ ] `authorizeHiddenPrice` cannot disclose the price.
-- [ ] `settle` cannot disclose a price unless both commitment and seller-bound checks pass.
-- [ ] Role authorization is checked independently of commitment preimages.
-- [ ] The default demo has no API-key dependency.
-- [ ] README states that solvency, inventory, and policy truthfulness are out of scope.
-- [ ] The plan does not assume native contract-call merging or unverified block-time access.
+- [x] Every public contract argument is intentionally public.
+- [x] Every secret limit, price opening, and randomness value is a witness.
+- [x] `authorizeHiddenPrice` cannot disclose the price.
+- [x] `settle` cannot disclose a price unless both commitment and seller-bound checks pass.
+- [x] Role authorization is checked independently of commitment preimages.
+- [x] The default demo has no API-key dependency.
+- [x] README states that solvency, inventory, and policy truthfulness are out of scope.
+- [x] The plan does not assume native contract-call merging or unverified block-time access.
+- [ ] A real Midnight.js proof-provider contract call has been exercised.
