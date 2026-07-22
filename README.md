@@ -241,15 +241,15 @@ python3 python_demo.py relay
 
 ```bash
 cd /Users/taemin/Developer/Midnight/midnight-counter
-python3 python_demo.py buyer
+python3 python_demo.py
 ```
 
 ```bash
 cd /Users/taemin/Developer/Midnight/midnight-counter
-python3 python_demo.py seller
+python3 python_demo.py
 ```
 
-구매자는 상품 코드와 최대 예산만, 판매자는 상품 코드와 최소 판매가만 입력합니다. 첫 제안가는 구매자 에이전트의 고정 규칙으로 자동 결정되고, 출력 금액은 `110,000 KRW`처럼 표시됩니다.
+각 클라이언트는 먼저 상품 코드를 입력한 뒤 구매자·판매자 역할을 선택합니다. 구매자는 최대 예산만, 판매자는 최소 판매가만 입력합니다. 첫 제안가는 구매자 에이전트의 고정 규칙으로 자동 결정되고, 출력 금액은 `110,000 KRW`처럼 표시됩니다.
 
 증명 순서는 실제 프로토콜과 동일한 모양으로 연출합니다.
 

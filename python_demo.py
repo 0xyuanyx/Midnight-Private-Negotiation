@@ -7,8 +7,7 @@ will be connected later.
 
 Run in three terminals:
   python3 python_demo.py relay
-  python3 python_demo.py buyer
-  python3 python_demo.py seller
+  python3 python_demo.py  # run once as buyer and once as seller
 """
 
 from __future__ import annotations
@@ -146,9 +145,8 @@ def connect(role: str) -> socket.socket:
     return sock
 
 
-def run_buyer() -> None:
-    print("=== 구매자 터미널 ===\n")
-    product = input("상품 코드: ").strip()
+def run_buyer(product: str) -> None:
+    print("\n=== 구매자 터미널 ===\n")
     max_price = read_money("최대 예산(KRW): ")
     opening_offer = choose_opening_offer(max_price)
     config = BuyerConfig(product, max_price, opening_offer)
@@ -186,9 +184,8 @@ def run_buyer() -> None:
                 return
 
 
-def run_seller() -> None:
-    print("=== 판매자 터미널 ===\n")
-    product = input("상품 코드: ").strip()
+def run_seller(product: str) -> None:
+    print("\n=== 판매자 터미널 ===\n")
     min_price = read_money("최소 판매가(KRW): ")
     config = SellerConfig(product, min_price)
 
@@ -228,11 +225,30 @@ def run_seller() -> None:
                 return
 
 
+def run_client() -> None:
+    product = input("상품 코드: ").strip()
+    print("\n역할을 선택하세요.")
+    print("1. 구매자")
+    print("2. 판매자")
+    while True:
+        role = input("선택: ").strip()
+        if role == "1":
+            run_buyer(product)
+            return
+        if role == "2":
+            run_seller(product)
+            return
+        print("1 또는 2를 입력해 주세요.")
+
+
 def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] not in {"relay", "buyer", "seller"}:
-        print("사용법: python3 python_demo.py [relay|buyer|seller]")
+    if len(sys.argv) > 2 or (len(sys.argv) == 2 and sys.argv[1] != "relay"):
+        print("사용법: python3 python_demo.py [relay]")
         raise SystemExit(2)
-    {"relay": run_relay, "buyer": run_buyer, "seller": run_seller}[sys.argv[1]]()
+    if len(sys.argv) == 2:
+        run_relay()
+    else:
+        run_client()
 
 
 if __name__ == "__main__":
