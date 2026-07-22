@@ -32,7 +32,7 @@
 - `public_event_from_message(message: dict[str, Any], block: int) -> dict[str, Any] | None` returns a sanitized event or `None` for non-public messages.
 - `render_public_event(event: dict[str, Any]) -> str` renders exactly one Observer line.
 
-- [ ] **Step 1: Write failing unit tests for formatting and filtering**
+- [x] **Step 1: Write failing unit tests for formatting and filtering**
 
   Add tests covering these exact behaviors:
 
@@ -72,7 +72,7 @@
       assert event == {"event": "CANCELLED", "block": 15}
   ```
 
-- [ ] **Step 2: Run the focused tests and verify they fail**
+- [x] **Step 2: Run the focused tests and verify they fail**
 
   Run:
 
@@ -82,7 +82,7 @@
 
   Expected result: FAIL because the public-event helpers do not exist yet.
 
-- [ ] **Step 3: Implement pure projection and renderer helpers**
+- [x] **Step 3: Implement pure projection and renderer helpers**
 
   Map messages as follows:
 
@@ -105,7 +105,7 @@
   [block 15] CANCELLED — 공개된 값: 없음
   ```
 
-- [ ] **Step 4: Run the focused tests and verify they pass**
+- [x] **Step 4: Run the focused tests and verify they pass**
 
   Run:
 
@@ -113,7 +113,7 @@
   python3 -m unittest test_python_demo.py -v
   ```
 
-- [ ] **Step 5: Commit the pure projection**
+- [x] **Step 5: Commit the pure projection**
 
   ```bash
   git add python_demo.py test_python_demo.py
@@ -132,31 +132,31 @@
 - `RelayState.publish_public(message: dict[str, Any]) -> None` assigns the next block, stores the event, and broadcasts only the sanitized event.
 - A `HELLO` message with role `observer` registers a public client and replays all stored public events.
 
-- [ ] **Step 1: Add failing tests for event history and replay**
+- [x] **Step 1: Add failing tests for event history and replay**
 
   Test that a newly connected Observer receives stored events in block order and that an `OFFER` never reaches the public event list.
 
-- [ ] **Step 2: Run the focused tests and verify they fail**
+- [x] **Step 2: Run the focused tests and verify they fail**
 
   ```bash
   python3 -m unittest test_python_demo.py -v
   ```
 
-- [ ] **Step 3: Add relay-side public event history**
+- [x] **Step 3: Add relay-side public event history**
 
   Start the synthetic block counter at `12`. On each incoming raw message, call `publish_public` only for the five public message types. Do not broadcast the raw message to Observer clients.
 
-- [ ] **Step 4: Add Observer registration and replay**
+- [x] **Step 4: Add Observer registration and replay**
 
   Keep Buyer/Seller routing unchanged. When an Observer sends `HELLO`, replay `public_events` and then stream future sanitized events.
 
-- [ ] **Step 5: Run the focused tests and verify they pass**
+- [x] **Step 5: Run the focused tests and verify they pass**
 
   ```bash
   python3 -m unittest test_python_demo.py -v
   ```
 
-- [ ] **Step 6: Commit relay projection**
+- [x] **Step 6: Commit relay projection**
 
   ```bash
   git add python_demo.py test_python_demo.py
@@ -173,11 +173,11 @@
 - `run_observer() -> None` connects as role `observer`, receives public events, and prints the rendered line.
 - CLI accepts `python3 python_demo.py observer` in addition to `relay` and the default Buyer/Seller client mode.
 
-- [ ] **Step 1: Add a failing CLI/output test**
+- [x] **Step 1: Add a failing CLI/output test**
 
   Verify the Observer renderer prints the four-line success sequence and the three-line cancellation sequence without raw negotiation fields.
 
-- [ ] **Step 2: Implement `run_observer()`**
+- [x] **Step 2: Implement `run_observer()`**
 
   Show this header and status text:
 
@@ -188,7 +188,7 @@
 
   For every `PUBLIC_EVENT`, print one rendered line. Do not print a raw JSON payload.
 
-- [ ] **Step 3: Update README run instructions and demo script**
+- [x] **Step 3: Update README run instructions and demo script**
 
   Document this order:
 
@@ -201,7 +201,7 @@
 
   Explain that the block numbers and commitments are simulated in Python, while the displayed public boundary matches the intended Midnight ledger view.
 
-- [ ] **Step 4: Run syntax, unit, and manual success/failure checks**
+- [x] **Step 4: Run syntax, unit, and manual success/failure checks**
 
   ```bash
   python3 -m py_compile python_demo.py
@@ -211,7 +211,7 @@
   git diff --check
   ```
 
-- [ ] **Step 5: Commit Observer mode**
+- [x] **Step 5: Commit Observer mode**
 
   ```bash
   git add python_demo.py README.md test_python_demo.py
@@ -220,10 +220,10 @@
 
 ## Self-review checklist
 
-- [ ] Observer gets only the five specified event types.
-- [ ] Observer never receives a raw offer, counter, accept, budget, minimum price, reason, or `(p, r_P)`.
-- [ ] Success displays exactly four public state lines.
-- [ ] Cancellation displays no price and says `공개된 값: 없음`.
-- [ ] Prefixes are visibly shortened with `0x` and `…`.
-- [ ] Synthetic block numbers are monotonic and documented as simulation values.
-- [ ] Existing Buyer/Seller negotiation and proof-order behavior remains unchanged.
+- [x] Observer gets only the five specified event types.
+- [x] Observer never receives a raw offer, counter, accept, budget, minimum price, reason, or `(p, r_P)`.
+- [x] Success displays exactly four public state lines.
+- [x] Cancellation displays no price and says `공개된 값: 없음`.
+- [x] Prefixes are visibly shortened with `0x` and `…`.
+- [x] Synthetic block numbers are monotonic and documented as simulation values.
+- [x] Existing Buyer/Seller negotiation and proof-order behavior remains unchanged.

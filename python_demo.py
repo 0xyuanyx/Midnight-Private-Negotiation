@@ -13,6 +13,7 @@ Run in three terminals:
 from __future__ import annotations
 
 import json
+import os
 import secrets
 import socket
 import socketserver
@@ -22,11 +23,60 @@ from dataclasses import dataclass
 from typing import Any
 
 HOST = "127.0.0.1"
-PORT = 8765
+PORT = int(os.environ.get("DEBUTLER_DEMO_PORT", "8765"))
 
 
 def money(value: int | str) -> str:
     return f"{int(value):,}"
+
+
+def short_commitment(value: str) -> str:
+    normalized = value[2:] if value.startswith("0x") else value
+    return f"0x{normalized[:4]}…"
+
+
+def public_event_from_message(message: dict[str, Any], block: int) -> dict[str, Any] | None:
+    message_type = message.get("type")
+    if message_type == "CREATE_DEAL":
+        return {
+            "event": "DEAL_CREATED",
+            "block": block,
+            "deal_id": message.get("deal_id", message.get("product", "unknown")),
+            "commitment": short_commitment(message["buyer_commitment"]),
+        }
+    if message_type == "DEAL_JOINED":
+        return {
+            "event": "SELLER_JOINED",
+            "block": block,
+            "commitment": short_commitment(message["seller_commitment"]),
+        }
+    if message_type == "AUTHORIZED":
+        return {
+            "event": "PRICE_COMMITTED",
+            "block": block,
+            "commitment": short_commitment(message["price_commitment"]),
+        }
+    if message_type == "SETTLED":
+        return {"event": "SETTLED", "block": block, "price": int(message["price"])}
+    if message_type == "CANCEL":
+        return {"event": "CANCELLED", "block": block}
+    return None
+
+
+def render_public_event(event: dict[str, Any]) -> str:
+    block = event["block"]
+    event_type = event["event"]
+    if event_type == "DEAL_CREATED":
+        return f"[block {block}] DEAL#{event['deal_id']} created — C_B: {event['commitment']}"
+    if event_type == "SELLER_JOINED":
+        return f"[block {block}] C_S registered — {event['commitment']}"
+    if event_type == "PRICE_COMMITTED":
+        return f"[block {block}] C_P registered — {event['commitment']}"
+    if event_type == "SETTLED":
+        return f"[block {block}] SETTLED: {money(event['price'])} KRW"
+    if event_type == "CANCELLED":
+        return f"[block {block}] CANCELLED — 공개된 값: 없음"
+    raise ValueError(f"unknown public event: {event_type}")
 
 
 def read_money(prompt: str) -> int:
@@ -44,6 +94,10 @@ def choose_opening_offer(max_price: int) -> int:
     """Simple deterministic buyer policy for the teaching demo."""
     rounded = (max_price * 90 // 100) // 1_000 * 1_000
     return max(1_000, rounded)
+
+
+def new_commitment() -> str:
+    return "0x" + secrets.token_hex(32)
 
 
 def show_progress(message: str, cycles: int = 2) -> None:
@@ -77,7 +131,39 @@ def receive_lines(sock: socket.socket):
 class RelayState:
     def __init__(self) -> None:
         self.clients: dict[str, socketserver.StreamRequestHandler] = {}
+        self.public_clients: set[socketserver.BaseRequestHandler] = set()
+        self.public_events: list[dict[str, Any]] = []
+        self.next_block = 12
         self.lock = __import__("threading").Lock()
+
+    def publish_public(self, message: dict[str, Any]) -> dict[str, Any] | None:
+        with self.lock:
+            event = public_event_from_message(message, self.next_block)
+            if event is None:
+                return None
+            self.next_block += 1
+            self.public_events.append(event)
+            clients = list(self.public_clients)
+        payload = (json.dumps({"type": "PUBLIC_EVENT", "event": event}) + "\n").encode()
+        for client in clients:
+            try:
+                client.request.sendall(payload)
+            except OSError:
+                self.unregister_observer(client)
+        return event
+
+    def register_observer(self, client: socketserver.BaseRequestHandler) -> None:
+        with self.lock:
+            self.public_clients.add(client)
+            history = list(self.public_events)
+        for event in history:
+            client.request.sendall(
+                (json.dumps({"type": "PUBLIC_EVENT", "event": event}) + "\n").encode()
+            )
+
+    def unregister_observer(self, client: socketserver.BaseRequestHandler) -> None:
+        with self.lock:
+            self.public_clients.discard(client)
 
 
 relay_state = RelayState()
@@ -92,6 +178,10 @@ class RelayHandler(socketserver.BaseRequestHandler):
                 message = json.loads(line)
                 if message["type"] == "HELLO":
                     role = message["role"]
+                    if role == "observer":
+                        relay_state.register_observer(self)
+                        print("[Relay] observer connected", flush=True)
+                        continue
                     with relay_state.lock:
                         relay_state.clients[role] = self
                         print(f"[Relay] {role} connected", flush=True)
@@ -99,6 +189,7 @@ class RelayHandler(socketserver.BaseRequestHandler):
                             self.broadcast({"type": "READY"})
                     continue
 
+                relay_state.publish_public(message)
                 target = "seller" if message.get("from") == "buyer" else "buyer"
                 with relay_state.lock:
                     recipient = relay_state.clients.get(target)
@@ -106,8 +197,11 @@ class RelayHandler(socketserver.BaseRequestHandler):
                         recipient.request.sendall((json.dumps(message) + "\n").encode())
         finally:
             if role:
-                with relay_state.lock:
-                    relay_state.clients.pop(role, None)
+                if role == "observer":
+                    relay_state.unregister_observer(self)
+                else:
+                    with relay_state.lock:
+                        relay_state.clients.pop(role, None)
                 print(f"[Relay] {role} disconnected", flush=True)
 
     @staticmethod
@@ -157,6 +251,7 @@ def run_buyer(product: str) -> None:
     print("\n=== 구매자 터미널 ===\n")
     max_price = read_money("최대 예산(KRW): ")
     opening_offer = choose_opening_offer(max_price)
+    buyer_commitment = new_commitment()
     config = BuyerConfig(product, max_price, opening_offer)
 
     with connect("buyer") as sock:
@@ -171,7 +266,7 @@ def run_buyer(product: str) -> None:
                         "type": "CREATE_DEAL",
                         "from": "buyer",
                         "product": config.product,
-                        "buyer_commitment": "C_B",
+                        "buyer_commitment": buyer_commitment,
                     },
                 )
             elif message["type"] == "DEAL_JOINED":
@@ -202,6 +297,7 @@ def run_buyer(product: str) -> None:
                         "type": "AUTHORIZED",
                         "from": "buyer",
                         "price": price,
+                        "price_commitment": new_commitment(),
                         "price_opening": secrets.token_hex(8),
                     },
                 )
@@ -218,6 +314,7 @@ def run_buyer(product: str) -> None:
 def run_seller(product: str) -> None:
     print("\n=== 판매자 터미널 ===\n")
     min_price = read_money("최소 판매가(KRW): ")
+    seller_commitment = new_commitment()
     config = SellerConfig(product, min_price)
 
     with connect("seller") as sock:
@@ -230,7 +327,15 @@ def run_seller(product: str) -> None:
                     return
                 show_progress("판매자 commitment를 생성하는 중")
                 print("온체인 시뮬레이션: joinDeal(C_S) 완료\n")
-                send_line(sock, {"type": "DEAL_JOINED", "from": "seller", "product": config.product})
+                send_line(
+                    sock,
+                    {
+                        "type": "DEAL_JOINED",
+                        "from": "seller",
+                        "product": config.product,
+                        "seller_commitment": seller_commitment,
+                    },
+                )
             elif message["type"] == "OFFER":
                 if message["product"] != config.product:
                     print("상품 코드가 달라 협상을 종료합니다.")
@@ -265,6 +370,15 @@ def run_seller(product: str) -> None:
                 return
 
 
+def run_observer() -> None:
+    print("=== Observer (누구나 볼 수 있는 온체인 상태) ===\n")
+    print("공개 이벤트를 기다리는 중...\n")
+    with connect("observer") as sock:
+        for message in receive_lines(sock):
+            if message.get("type") == "PUBLIC_EVENT":
+                print(render_public_event(message["event"]), flush=True)
+
+
 def run_client() -> None:
     product = input("상품 코드: ").strip()
     print("\n역할을 선택하세요.")
@@ -282,11 +396,11 @@ def run_client() -> None:
 
 
 def main() -> None:
-    if len(sys.argv) > 2 or (len(sys.argv) == 2 and sys.argv[1] != "relay"):
-        print("사용법: python3 python_demo.py [relay]")
+    if len(sys.argv) > 2 or (len(sys.argv) == 2 and sys.argv[1] not in {"relay", "observer"}):
+        print("사용법: python3 python_demo.py [relay|observer]")
         raise SystemExit(2)
     if len(sys.argv) == 2:
-        run_relay()
+        {"relay": run_relay, "observer": run_observer}[sys.argv[1]]()
     else:
         run_client()
 

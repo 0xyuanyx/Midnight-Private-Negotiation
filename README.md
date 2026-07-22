@@ -34,6 +34,7 @@ AI 에이전트는 기술의 주인공이 아니라 기술을 직관적으로 �
 - [x] 두 규칙 기반 에이전트와 in-memory relay 테스트 2개 통과
 - [x] Docker Proof Server 이미지 다운로드 및 `6300` 포트 기동 확인
 - [x] Python 2터미널 relay 데모와 KRW 천 단위 출력
+- [x] Observer 공개 ledger 뷰: commitment prefix·합성 block·settled/cancelled 상태
 - [ ] Midnight.js proof provider와 실제 contract call 연결
 - [ ] 협상 성공 뒤 실제 `authorizeHiddenPrice → settle` 증명 생성
 - [ ] 선택적 LLM 어댑터
@@ -232,7 +233,7 @@ Proof Server가 실행 중이어도 현재 `npm run demo`가 자동으로 Proof 
 
 ### Python 터미널 이해용 데모
 
-Python 데모는 실제 Midnight 증명이 아니라, 구매자·판매자·중간 Relay가 어떻게 연결되는지 보여주는 학습용 프로토타입입니다. 세 터미널을 열고 실행합니다.
+Python 데모는 실제 Midnight 증명이 아니라, 구매자·판매자·중간 Relay·Observer가 어떻게 연결되는지 보여주는 학습용 프로토타입입니다. 네 터미널을 열고 실행합니다.
 
 ```bash
 cd /Users/taemin/Developer/Midnight/midnight-counter
@@ -241,6 +242,11 @@ python3 python_demo.py relay
 
 ```bash
 cd /Users/taemin/Developer/Midnight/midnight-counter
+python3 python_demo.py observer
+```
+
+```bash
+cd /Users/taemin/Developer/Midnight/midnight-counter
 python3 python_demo.py
 ```
 
@@ -248,6 +254,8 @@ python3 python_demo.py
 cd /Users/taemin/Developer/Midnight/midnight-counter
 python3 python_demo.py
 ```
+
+Observer를 구매자·판매자보다 먼저 실행하면 공개 이벤트를 모두 볼 수 있습니다. 구매자·판매자 클라이언트는 상품 코드를 입력한 뒤 역할을 선택합니다.
 
 각 클라이언트는 먼저 상품 코드를 입력한 뒤 구매자·판매자 역할을 선택합니다. 구매자는 최대 예산만, 판매자는 최소 판매가만 입력합니다. 첫 제안가는 구매자 에이전트의 고정 규칙으로 자동 결정되고, 출력 금액은 `110,000 KRW`처럼 표시됩니다.
 
