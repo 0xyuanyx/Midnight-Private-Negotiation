@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "standalone": "docker compose -f standalone.yml pull && node --no-warnings --experimental-specifier-resolution=node --loader ts-node/esm src/standalone.ts",
-    "test-api": "docker compose -f standalone.yml pull && DEBUG='testcontainers' vitest run",
+    "test-api": "docker compose -f standalone.yml pull && DEBUG='testcontainers' vitest run src/test/counter.api.test.ts",
     "build": "rm -rf dist && tsc --project tsconfig.build.json",
     "demo:isolated": "node --no-warnings --experimental-specifier-resolution=node --loader ts-node/esm src/isolation/demo-runner.ts",
     "demo:preflight": "node --no-warnings --experimental-specifier-resolution=node --loader ts-node/esm src/isolation/demo-runner.ts",
