@@ -1,14 +1,14 @@
-# De-Butler MVP 및 발표 사례 구현 계획
+# 비공개 협상 MVP 및 발표 사례 구현 계획
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a deterministic, locally reproducible Midnight 사례 DApp for the presentation **“Midnight에서 비밀을 공개하지 않고 조건을 증명하는 법”**. Two role-based agents negotiate a price while keeping their committed maximum/minimum limits private and proving only policy compliance.
+**Goal:** Build a deterministic, locally reproducible Midnight 사례 DApp for the presentation **“Midnight에서 정보를 공개하지 않고 거래 조건을 증명하는 법”**. Two role-based agents negotiate a price while keeping their committed maximum/minimum limits private and proving only policy compliance.
 
 **Architecture:** Two local agent runtimes communicate through an in-memory relay in the MVP (a WebSocket relay is a future transport option). Each runtime keeps its own limit, randomness, caller secret, and witness provider; the relay transports negotiation messages and never calls the contract. The Compact contract stores public commitments and settlement status, proves the buyer's hidden price is below its committed maximum, then proves the seller accepts that same hidden price above its committed minimum before disclosing the final price.
 
 **Tech Stack:** Compact 0.30.0 for the scaffolded Counter repository, Midnight Compact runtime 0.15.0, TypeScript/Node.js 24, Vitest, Midnight.js adapters, in-memory relay, Docker Proof Server on port 6300. A future LLM adapter may call one provider API for both roles, but the MVP must work without an API key.
 
-**Status (2026-07-22):** Environment, presentation framing, Compact contract, local simulator, deterministic agent relay, and Proof Server startup are verified. The next implementation task is connecting the generated contract to Midnight.js's proof provider and exercising a real `authorizeHiddenPrice → settle` call.
+**Status (2026-07-24):** The Compact contract and simulator now implement the staged `createDeal (deployment) → joinDeal → authorizeHiddenPrice → settle` lifecycle shown by the deterministic Python relay/Observer demo. Proof Server startup is verified, but Midnight.js proof-provider and real contract-call integration is still pending.
 
 ## Global Constraints
 
@@ -26,11 +26,11 @@
 ### Task 1: Document the frozen design and runbook — completed
 
 **Files:**
-- Create: `docs/superpowers/plans/2026-07-22-debutler-mvp.md`
+- Create: `docs/superpowers/plans/2026-07-22-negotiation-mvp.md`
 - Modify: `README.md`
 
 **Interfaces:**
-- Produces the protocol vocabulary used by all later tasks: `createDeal`, `authorizeHiddenPrice`, `settle`, `cancel`, `buyerCommitment`, `sellerCommitment`, `priceCommitment`, `finalPrice`.
+- Produces the protocol vocabulary used by all later tasks: `createDeal`, `joinDeal`, `authorizeHiddenPrice`, `settle`, `cancel`, `buyerCommitment`, `sellerCommitment`, `priceCommitment`, `finalPrice`.
 
 - [x] **Step 1: Record the protocol invariants**
 
@@ -65,26 +65,27 @@
   Run:
 
   ```bash
-  git add docs/superpowers/plans/2026-07-22-debutler-mvp.md README.md
-  git commit -m "docs: freeze De-Butler MVP design and runbook"
+  git add docs/superpowers/plans/2026-07-22-negotiation-mvp.md README.md
+  git commit -m "docs: freeze private negotiation MVP design and runbook"
   ```
 
-### Task 2: Convert the Counter contract into a minimal De-Butler contract — completed
+### Task 2: Convert the Counter contract into a minimal private negotiation contract — completed
 
 **Files:**
-- Create: `contract/src/debutler.compact`
+- Create: `contract/src/negotiation.compact`
 - Modify: `contract/src/witnesses.ts`
 - Modify: `contract/src/index.ts`
 - Modify: `contract/package.json`
 - Delete: `contract/src/counter.compact`
 - Delete: `contract/src/test/counter-simulator.ts`
 - Delete: `contract/src/test/counter.test.ts`
-- Create: `contract/src/test/debutler-simulator.ts`
-- Create: `contract/src/test/debutler.test.ts`
+- Create: `contract/src/test/negotiation-simulator.ts`
+- Create: `contract/src/test/negotiation.test.ts`
 
 **Interfaces:**
-- `Contract<DebutlerPrivateState>` generated from `debutler.compact`.
-- Exported circuits: `authorizeHiddenPrice(): []`, `settle(): []`, `cancelAsBuyer(): []`, and `cancelAsSeller(): []`.
+- `Contract<NegotiationPrivateState>` generated from `negotiation.compact`.
+- Contract deployment acts as `createDeal`; exported circuits are `joinDeal(): []`, `authorizeHiddenPrice(): []`, `settle(): []`, `cancelAsBuyer(): []`, and `cancelAsSeller(): []`.
+- New contracts begin in `WAITING_SELLER`; `joinDeal()` derives and records the seller key and seller limit commitment from seller witnesses before opening the deal.
 - Witness names: `buyerSecretKey`, `sellerSecretKey`, `buyerMaxPrice`, `buyerLimitRandomness`, `agreedPrice`, `priceRandomness`, `sellerMinPrice`, `sellerLimitRandomness`.
 
 - [x] **Step 1: Write simulator tests**
@@ -93,14 +94,14 @@
 
   ```ts
   it('does not disclose a price after authorization alone', () => {
-    const simulator = new DebutlerSimulator(validScenario());
+    const simulator = new NegotiationSimulator(validScenario());
     simulator.authorizeHiddenPrice();
     expect(simulator.getLedger().finalPrice).toBe(0n);
     expect(simulator.getLedger().status).toBe('AUTHORIZED');
   });
 
   it('settles when the hidden price is inside both committed limits', () => {
-    const simulator = new DebutlerSimulator(validScenario());
+    const simulator = new NegotiationSimulator(validScenario());
     simulator.authorizeHiddenPrice();
     simulator.settle();
     expect(simulator.getLedger().finalPrice).toBe(100n);
@@ -108,18 +109,18 @@
   });
 
   it('rejects a buyer price above the committed maximum', () => {
-    const simulator = new DebutlerSimulator({ ...validScenario(), buyerMax: 90n, price: 100n });
+    const simulator = new NegotiationSimulator({ ...validScenario(), buyerMax: 90n, price: 100n });
     expect(() => simulator.authorizeHiddenPrice()).toThrow();
   });
 
   it('rejects a seller minimum above the agreed price', () => {
-    const simulator = new DebutlerSimulator({ ...validScenario(), sellerMin: 110n });
+    const simulator = new NegotiationSimulator({ ...validScenario(), sellerMin: 110n });
     simulator.authorizeHiddenPrice();
     expect(() => simulator.settle()).toThrow();
   });
 
   it('rejects a price opening that does not match the buyer commitment', () => {
-    const simulator = new DebutlerSimulator(validScenario());
+    const simulator = new NegotiationSimulator(validScenario());
     simulator.authorizeHiddenPrice();
     simulator.setPriceWitness({ price: 99n, randomness: validScenario().priceRandomness });
     expect(() => simulator.settle()).toThrow();
@@ -132,7 +133,7 @@
 
   ```bash
   cd contract
-  npm test -- --run src/test/debutler.test.ts
+  npm test -- --run src/test/negotiation.test.ts
   ```
 
   The initial red phase was completed before implementation; the focused suite now passes.
@@ -148,7 +149,7 @@
   ```bash
   npm run compact
   npm run build
-  npm test -- --run src/test/debutler.test.ts
+  npm test -- --run src/test/negotiation.test.ts
   ```
 
 - [x] **Step 5: Run all contract checks**

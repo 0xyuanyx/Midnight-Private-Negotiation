@@ -14,11 +14,19 @@
 // limitations under the License.
 
 import { type WalletContext } from './api';
+import {
+  limitCommitment,
+  publicKeyForSecret,
+  withSellerPriceOpening,
+  type BuyerPrivateState,
+  type SellerPrivateState,
+} from '@midnight-ntwrk/counter-contract';
+import { randomBytes } from 'node:crypto';
 import { stdin as input, stdout as output } from 'node:process';
 import { createInterface, type Interface } from 'node:readline/promises';
 import { type Logger } from 'pino';
 import { type StartedDockerComposeEnvironment, type DockerComposeEnvironment } from 'testcontainers';
-import { type CounterProviders, type DeployedCounterContract } from './common-types';
+import { type DeployedNegotiationContract, NegotiationPrivateStateId, type NegotiationProviders } from './common-types';
 import { type Config, StandaloneConfig } from './config';
 import * as api from './api';
 
@@ -35,9 +43,9 @@ const GENESIS_MINT_WALLET_SEED = '0000000000000000000000000000000000000000000000
 const BANNER = `
 ╔══════════════════════════════════════════════════════════════╗
 ║                                                              ║
-║              Midnight Counter Example                        ║
-║              ─────────────────────                           ║
-║              A privacy-preserving smart contract demo        ║
+║              Midnight Negotiation Demo                       ║
+║              ─────────────────────────                       ║
+║              Staged private-price contract integration       ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 `;
@@ -61,21 +69,24 @@ const contractMenu = (dustBalance: string) => `
 ${DIVIDER}
   Contract Actions${dustBalance ? `                    DUST: ${dustBalance}` : ''}
 ${DIVIDER}
-  [1] Deploy a new counter contract
-  [2] Join an existing counter contract
-  [3] Monitor DUST balance
-  [4] Exit
+  [1] Deploy a staged negotiation demo
+  [2] Monitor DUST balance
+  [3] Exit
 ${'─'.repeat(62)}
 > `;
 
-/** Build the counter actions menu, showing current DUST balance in the header. */
-const counterMenu = (dustBalance: string) => `
+/** Build the negotiation actions menu, showing current DUST balance in the header. */
+const negotiationMenu = (dustBalance: string) => `
 ${DIVIDER}
-  Counter Actions${dustBalance ? `                     DUST: ${dustBalance}` : ''}
+  Negotiation Actions${dustBalance ? `                 DUST: ${dustBalance}` : ''}
 ${DIVIDER}
-  [1] Increment counter
-  [2] Display current counter value
-  [3] Exit
+  [1] Seller joins deal
+  [2] Buyer authorizes hidden price
+  [3] Seller settles and discloses price
+  [4] Display public ledger state
+  [5] Cancel as buyer
+  [6] Cancel as seller
+  [7] Exit
 ${'─'.repeat(62)}
 > `;
 
@@ -125,10 +136,43 @@ const getDustLabel = async (wallet: api.WalletContext['wallet']): Promise<string
   }
 };
 
-/** Prompt for a contract address and join an existing deployed contract. */
-const joinContract = async (providers: CounterProviders, rli: Interface): Promise<DeployedCounterContract> => {
-  const contractAddress = await rli.question('Enter the contract address (hex): ');
-  return await api.joinContract(providers, contractAddress);
+const randomBytes32 = (): Uint8Array => new Uint8Array(randomBytes(32));
+
+const createDemoDeployment = () => {
+  const dealId = randomBytes32();
+  const buyerSecretKey = randomBytes32();
+  const buyerKey = publicKeyForSecret(buyerSecretKey);
+  const buyerLimitRandomness = randomBytes32();
+  const buyerPrivateState: BuyerPrivateState = {
+    role: 'buyer',
+    buyerSecretKey,
+    buyerMaxPrice: 110n,
+    buyerLimitRandomness,
+    agreedPrice: 100n,
+    priceRandomness: randomBytes32(),
+  };
+  const sellerPrivateState: SellerPrivateState = {
+    role: 'seller',
+    sellerSecretKey: randomBytes32(),
+    sellerMinPrice: 95n,
+    sellerLimitRandomness: randomBytes32(),
+  };
+
+  return {
+    buyerPrivateState,
+    sellerPrivateState,
+    deployment: {
+      dealId,
+      buyerKey,
+      buyerCommitment: limitCommitment(
+        dealId,
+        'negotiation:buyer:',
+        buyerKey,
+        buyerPrivateState.buyerMaxPrice,
+        buyerLimitRandomness,
+      ),
+    },
+  };
 };
 
 /**
@@ -144,25 +188,32 @@ const startDustMonitor = async (wallet: api.WalletContext['wallet'], rli: Interf
 };
 
 /**
- * Deploy or join flow. Returns the contract handle, or null if the user exits.
- * Errors during deploy/join are caught and displayed — the user stays in the menu.
+ * Deploy flow. The first integration milestone intentionally keeps both parties'
+ * private inputs in one local runtime so every real circuit can be exercised.
  */
-const deployOrJoin = async (
-  providers: CounterProviders,
+const deployDemo = async (
+  providers: NegotiationProviders,
   walletCtx: api.WalletContext,
   rli: Interface,
-): Promise<DeployedCounterContract | null> => {
+): Promise<{
+  contract: DeployedNegotiationContract;
+  buyerPrivateState: BuyerPrivateState;
+  sellerPrivateState: SellerPrivateState;
+} | null> => {
   while (true) {
     const dustLabel = await getDustLabel(walletCtx.wallet);
     const choice = await rli.question(contractMenu(dustLabel));
     switch (choice.trim()) {
       case '1':
         try {
-          const contract = await api.withStatus('Deploying counter contract', () =>
-            api.deploy(providers, { privateCounter: 0 }),
+          const { buyerPrivateState, sellerPrivateState, deployment } = createDemoDeployment();
+          const contract = await api.withStatus('Deploying negotiation contract', () =>
+            api.deploy(providers, buyerPrivateState, deployment),
           );
           console.log(`  Contract deployed at: ${contract.deployTxData.public.contractAddress}\n`);
-          return contract;
+          console.log('  Demo values: buyer max 110, seller min 95, agreed price 100');
+          console.log('  Private keys and randomness remain in local private state.\n');
+          return { contract, buyerPrivateState, sellerPrivateState };
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
           console.log(`\n  ✗ Deploy failed: ${msg}`);
@@ -187,17 +238,9 @@ const deployOrJoin = async (
         }
         break;
       case '2':
-        try {
-          return await joinContract(providers, rli);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          console.log(`  ✗ Failed to join contract: ${msg}\n`);
-        }
-        break;
-      case '3':
         await startDustMonitor(walletCtx.wallet, rli);
         break;
-      case '4':
+      case '3':
         return null;
       default:
         console.log(`  Invalid choice: ${choice}`);
@@ -206,31 +249,84 @@ const deployOrJoin = async (
 };
 
 /**
- * Main interaction loop. Once a contract is deployed/joined, the user
- * can increment the counter or query its current value.
+ * Main interaction loop for the staged negotiation lifecycle.
  */
-const mainLoop = async (providers: CounterProviders, walletCtx: api.WalletContext, rli: Interface): Promise<void> => {
-  const counterContract = await deployOrJoin(providers, walletCtx, rli);
-  if (counterContract === null) {
+const mainLoop = async (
+  providers: NegotiationProviders,
+  walletCtx: api.WalletContext,
+  rli: Interface,
+): Promise<void> => {
+  const session = await deployDemo(providers, walletCtx, rli);
+  if (session === null) {
     return;
   }
+  const { contract: negotiationContract, buyerPrivateState, sellerPrivateState } = session;
+  const contractAddress = negotiationContract.deployTxData.public.contractAddress;
+  const activatePrivateState = async (state: BuyerPrivateState | SellerPrivateState): Promise<void> => {
+    providers.privateStateProvider.setContractAddress(contractAddress);
+    await providers.privateStateProvider.set(NegotiationPrivateStateId, state);
+  };
 
   while (true) {
     const dustLabel = await getDustLabel(walletCtx.wallet);
-    const choice = await rli.question(counterMenu(dustLabel));
+    const choice = await rli.question(negotiationMenu(dustLabel));
     switch (choice.trim()) {
       case '1':
         try {
-          await api.withStatus('Incrementing counter', () => api.increment(counterContract));
+          await activatePrivateState(sellerPrivateState);
+          await api.withStatus('Seller joining deal', () => api.joinDeal(negotiationContract));
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          console.log(`  ✗ Increment failed: ${msg}\n`);
+          console.log(`  ✗ Seller join failed: ${msg}\n`);
         }
         break;
       case '2':
-        await api.displayCounterValue(providers, counterContract);
+        try {
+          await activatePrivateState(buyerPrivateState);
+          await api.withStatus('Authorizing hidden price', () => api.authorizeHiddenPrice(negotiationContract));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.log(`  ✗ Authorization failed: ${msg}\n`);
+        }
         break;
       case '3':
+        try {
+          await activatePrivateState(
+            withSellerPriceOpening(sellerPrivateState, {
+              agreedPrice: buyerPrivateState.agreedPrice,
+              priceRandomness: buyerPrivateState.priceRandomness,
+            }),
+          );
+          await api.withStatus('Settling negotiation', () => api.settle(negotiationContract));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.log(`  ✗ Settlement failed: ${msg}\n`);
+        }
+        break;
+      case '4': {
+        const state = await api.getNegotiationLedgerState(providers, negotiationContract);
+        console.log(`  Status: ${state.status}; final price: ${state.finalPrice}\n`);
+        break;
+      }
+      case '5':
+        try {
+          await activatePrivateState(buyerPrivateState);
+          await api.withStatus('Cancelling as buyer', () => api.cancelAsBuyer(negotiationContract));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.log(`  ✗ Buyer cancellation failed: ${msg}\n`);
+        }
+        break;
+      case '6':
+        try {
+          await activatePrivateState(sellerPrivateState);
+          await api.withStatus('Cancelling as seller', () => api.cancelAsSeller(negotiationContract));
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.log(`  ✗ Seller cancellation failed: ${msg}\n`);
+        }
+        break;
+      case '7':
         return;
       default:
         console.log(`  Invalid choice: ${choice}`);
@@ -257,7 +353,7 @@ const mapContainerPort = (env: StartedDockerComposeEnvironment, url: string, con
  *   1. (Optional) Start Docker containers for proof server / node / indexer
  *   2. Build or restore a wallet and wait for it to be funded
  *   3. Configure midnight-js providers (proof server, indexer, wallet, private state)
- *   4. Enter the contract deploy/join and counter interaction loop
+ *   4. Enter the staged negotiation interaction loop
  *   5. Clean up: close wallet, readline, and docker environment
  */
 export const run = async (config: Config, _logger: Logger, dockerEnv?: DockerComposeEnvironment): Promise<void> => {
@@ -280,7 +376,7 @@ export const run = async (config: Config, _logger: Logger, dockerEnv?: DockerCom
         config.indexer = mapContainerPort(env, config.indexer, 'counter-indexer');
         config.indexerWS = mapContainerPort(env, config.indexerWS, 'counter-indexer');
         config.node = mapContainerPort(env, config.node, 'counter-node');
-        config.proofServer = mapContainerPort(env, config.proofServer, 'counter-proof-server');
+        config.proofServer = mapContainerPort(env, config.proofServer, 'negotiation-buyer-proof-server');
       }
     }
 
@@ -292,7 +388,9 @@ export const run = async (config: Config, _logger: Logger, dockerEnv?: DockerCom
 
     try {
       // Step 3: Configure midnight-js providers
-      const providers = await api.withStatus('Configuring providers', () => api.configureProviders(walletCtx, config));
+      const providers = await api.withStatus('Configuring providers', () =>
+        api.configureProviders(walletCtx, config, 'buyer'),
+      );
       console.log('');
 
       // Step 4: Enter the contract interaction loop

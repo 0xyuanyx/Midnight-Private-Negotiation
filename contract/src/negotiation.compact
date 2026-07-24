@@ -3,6 +3,7 @@ pragma language_version >= 0.20;
 import CompactStandardLibrary;
 
 export enum DealStatus {
+  WAITING_SELLER,
   OPEN,
   AUTHORIZED,
   SETTLED,
@@ -32,17 +33,31 @@ witness sellerLimitRandomness(): Bytes<32>;
 constructor(
   _dealId: Bytes<32>,
   _buyerKey: Bytes<32>,
-  _sellerKey: Bytes<32>,
-  _buyerCommitment: Bytes<32>,
-  _sellerCommitment: Bytes<32>
+  _buyerCommitment: Bytes<32>
 ) {
   dealId = disclose(_dealId);
   buyerKey = disclose(_buyerKey);
-  sellerKey = disclose(_sellerKey);
+  sellerKey = disclose(pad(32, ""));
   buyerCommitment = disclose(_buyerCommitment);
-  sellerCommitment = disclose(_sellerCommitment);
+  sellerCommitment = disclose(pad(32, ""));
   priceCommitment = disclose(pad(32, ""));
   finalPrice = 0;
+  status = DealStatus.WAITING_SELLER;
+}
+
+export circuit joinDeal(): [] {
+  assert(status == DealStatus.WAITING_SELLER, "deal is not waiting for seller");
+
+  const joinedSellerKey = publicKey(sellerSecretKey());
+  const joinedSellerCommitment = limitCommitment(
+    pad(32, "negotiation:seller:"),
+    joinedSellerKey,
+    sellerMinPrice(),
+    sellerLimitRandomness()
+  );
+
+  sellerKey = disclose(joinedSellerKey);
+  sellerCommitment = disclose(joinedSellerCommitment);
   status = DealStatus.OPEN;
 }
 
@@ -56,7 +71,7 @@ export circuit authorizeHiddenPrice(): [] {
   const priceRandomnessValue = priceRandomness();
 
   assert(
-    limitCommitment(pad(32, "de-butler:buyer:"), buyerKey, maxPrice, limitRandomness) == buyerCommitment,
+    limitCommitment(pad(32, "negotiation:buyer:"), buyerKey, maxPrice, limitRandomness) == buyerCommitment,
     "buyer limit commitment mismatch"
   );
   assert(price <= maxPrice, "price exceeds buyer maximum");
@@ -75,7 +90,7 @@ export circuit settle(): [] {
   const priceRandomnessValue = priceRandomness();
 
   assert(
-    limitCommitment(pad(32, "de-butler:seller:"), sellerKey, minPrice, limitRandomness) == sellerCommitment,
+    limitCommitment(pad(32, "negotiation:seller:"), sellerKey, minPrice, limitRandomness) == sellerCommitment,
     "seller limit commitment mismatch"
   );
   assert(
@@ -102,7 +117,7 @@ export circuit cancelAsSeller(): [] {
 
 circuit publicKey(secretKey: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([
-    pad(32, "de-butler:public-key:"),
+    pad(32, "negotiation:public-key:"),
     secretKey
   ]);
 }
@@ -125,7 +140,7 @@ circuit limitCommitment(
 circuit priceCommitmentFor(price: Uint<16>, randomness: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<4, Bytes<32>>>([
     dealId,
-    pad(32, "de-butler:price:"),
+    pad(32, "negotiation:price:"),
     price as Bytes<32>,
     randomness
   ]);

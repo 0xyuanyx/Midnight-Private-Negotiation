@@ -17,9 +17,12 @@ import path from 'node:path';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js/network-id';
 export const currentDir = path.resolve(new URL(import.meta.url).pathname, '..');
 
+export type RuntimeRole = 'buyer' | 'seller';
+
+export const privateStateStoreNameFor = (role: RuntimeRole): string => `negotiation-${role}-private-state`;
+
 export const contractConfig = {
-  privateStateStoreName: 'counter-private-state',
-  zkConfigPath: path.resolve(currentDir, '..', '..', 'contract', 'src', 'managed', 'counter'),
+  zkConfigPath: path.resolve(currentDir, '..', '..', 'contract', 'src', 'managed', 'negotiation'),
 };
 
 export interface Config {

@@ -13,10 +13,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import {
+  Negotiation,
+  hexToBytes,
+  limitCommitment,
+  publicKeyForSecret,
+  withSellerPriceOpening,
+  type BuyerPrivateState,
+  type SellerPrivateState,
+} from '@midnight-ntwrk/counter-contract';
 import { type WalletContext } from '../api';
 import path from 'path';
 import * as api from '../api';
-import { type CounterProviders } from '../common-types';
+import { NegotiationPrivateStateId, type NegotiationProviders } from '../common-types';
 import { currentDir } from '../config';
 import { createLogger } from '../logger-utils';
 import { TestEnvironment } from './commons';
@@ -28,7 +37,7 @@ const logger = await createLogger(logDir);
 describe('API', () => {
   let testEnvironment: TestEnvironment;
   let walletCtx: WalletContext;
-  let providers: CounterProviders;
+  let providers: NegotiationProviders;
 
   beforeAll(
     async () => {
@@ -36,7 +45,7 @@ describe('API', () => {
       testEnvironment = new TestEnvironment(logger);
       const testConfiguration = await testEnvironment.start();
       walletCtx = await testEnvironment.getWallet();
-      providers = await api.configureProviders(walletCtx, testConfiguration.dappConfig);
+      providers = await api.configureProviders(walletCtx, testConfiguration.dappConfig, 'buyer');
     },
     1000 * 60 * 45,
   );
@@ -45,20 +54,66 @@ describe('API', () => {
     await testEnvironment.shutdown();
   });
 
-  it('should deploy the contract and increment the counter [@slow]', async () => {
-    const counterContract = await api.deploy(providers, { privateCounter: 0 });
-    expect(counterContract).not.toBeNull();
+  it('should execute the staged negotiation lifecycle [@slow]', async () => {
+    const dealId = hexToBytes('11'.repeat(32));
+    const buyerSecretKey = hexToBytes('44'.repeat(32));
+    const buyerKey = publicKeyForSecret(buyerSecretKey);
+    const buyerPrivateState: BuyerPrivateState = {
+      role: 'buyer',
+      buyerSecretKey,
+      buyerMaxPrice: 110n,
+      buyerLimitRandomness: hexToBytes('66'.repeat(32)),
+      agreedPrice: 100n,
+      priceRandomness: hexToBytes('88'.repeat(32)),
+    };
+    const sellerPrivateState: SellerPrivateState = {
+      role: 'seller',
+      sellerSecretKey: hexToBytes('55'.repeat(32)),
+      sellerMinPrice: 95n,
+      sellerLimitRandomness: hexToBytes('77'.repeat(32)),
+    };
+    const buyerCommitment = limitCommitment(
+      dealId,
+      'negotiation:buyer:',
+      buyerKey,
+      buyerPrivateState.buyerMaxPrice,
+      buyerPrivateState.buyerLimitRandomness,
+    );
+    const contract = await api.deploy(providers, buyerPrivateState, {
+      dealId,
+      buyerKey,
+      buyerCommitment,
+    });
+    const contractAddress = contract.deployTxData.public.contractAddress;
+    const activatePrivateState = async (state: BuyerPrivateState | SellerPrivateState): Promise<void> => {
+      providers.privateStateProvider.setContractAddress(contractAddress);
+      await providers.privateStateProvider.set(NegotiationPrivateStateId, state);
+    };
 
-    const counter = await api.displayCounterValue(providers, counterContract);
-    expect(counter.counterValue).toEqual(BigInt(0));
+    expect((await api.getNegotiationLedgerState(providers, contract)).status).toBe(
+      Negotiation.DealStatus.WAITING_SELLER,
+    );
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    const response = await api.increment(counterContract);
-    expect(response.txHash).toMatch(/[0-9a-f]{64}/);
-    expect(response.blockHeight).toBeGreaterThan(BigInt(0));
+    await activatePrivateState(sellerPrivateState);
+    const joined = await api.joinDeal(contract);
+    expect(joined.txHash).toMatch(/[0-9a-f]{64}/);
+    expect((await api.getNegotiationLedgerState(providers, contract)).status).toBe(Negotiation.DealStatus.OPEN);
 
-    const counterAfter = await api.displayCounterValue(providers, counterContract);
-    expect(counterAfter.counterValue).toEqual(BigInt(1));
-    expect(counterAfter.contractAddress).toEqual(counter.contractAddress);
+    await activatePrivateState(buyerPrivateState);
+    await api.authorizeHiddenPrice(contract);
+    const authorized = await api.getNegotiationLedgerState(providers, contract);
+    expect(authorized.status).toBe(Negotiation.DealStatus.AUTHORIZED);
+    expect(authorized.finalPrice).toBe(0n);
+
+    await activatePrivateState(
+      withSellerPriceOpening(sellerPrivateState, {
+        agreedPrice: buyerPrivateState.agreedPrice,
+        priceRandomness: buyerPrivateState.priceRandomness,
+      }),
+    );
+    await api.settle(contract);
+    const settled = await api.getNegotiationLedgerState(providers, contract);
+    expect(settled.status).toBe(Negotiation.DealStatus.SETTLED);
+    expect(settled.finalPrice).toBe(100n);
   });
 });

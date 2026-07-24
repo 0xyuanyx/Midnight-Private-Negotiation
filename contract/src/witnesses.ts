@@ -1,58 +1,111 @@
 import type { WitnessContext } from "@midnight-ntwrk/compact-runtime";
-import type { Ledger, Witnesses } from "./managed/debutler/contract/index.js";
+import type {
+  Ledger,
+  Witnesses
+} from "./managed/negotiation/contract/index.js";
 
-export type DebutlerPrivateState = {
+export type BuyerPrivateState = {
+  role: "buyer";
   buyerSecretKey: Uint8Array;
-  sellerSecretKey: Uint8Array;
   buyerMaxPrice: bigint;
   buyerLimitRandomness: Uint8Array;
   agreedPrice: bigint;
   priceRandomness: Uint8Array;
-  sellerMinPrice: bigint;
-  sellerLimitRandomness: Uint8Array;
 };
 
-type Context = WitnessContext<Ledger, DebutlerPrivateState>;
+export type SellerPriceOpening = {
+  agreedPrice: bigint;
+  priceRandomness: Uint8Array;
+};
 
-export const witnesses: Witnesses<DebutlerPrivateState> = {
-  buyerSecretKey: (context: Context) => [
-    context.privateState,
-    context.privateState.buyerSecretKey
-  ],
-  sellerSecretKey: (context: Context) => [
-    context.privateState,
-    context.privateState.sellerSecretKey
-  ],
-  buyerCancelSecretKey: (context: Context) => [
-    context.privateState,
-    context.privateState.buyerSecretKey
-  ],
-  sellerCancelSecretKey: (context: Context) => [
-    context.privateState,
-    context.privateState.sellerSecretKey
-  ],
-  buyerMaxPrice: (context: Context) => [
-    context.privateState,
-    context.privateState.buyerMaxPrice
-  ],
-  buyerLimitRandomness: (context: Context) => [
-    context.privateState,
-    context.privateState.buyerLimitRandomness
-  ],
-  agreedPrice: (context: Context) => [
-    context.privateState,
-    context.privateState.agreedPrice
-  ],
-  priceRandomness: (context: Context) => [
-    context.privateState,
-    context.privateState.priceRandomness
-  ],
-  sellerMinPrice: (context: Context) => [
-    context.privateState,
-    context.privateState.sellerMinPrice
-  ],
-  sellerLimitRandomness: (context: Context) => [
-    context.privateState,
-    context.privateState.sellerLimitRandomness
-  ]
+export type SellerPrivateState = {
+  role: "seller";
+  sellerSecretKey: Uint8Array;
+  sellerMinPrice: bigint;
+  sellerLimitRandomness: Uint8Array;
+  priceOpening?: SellerPriceOpening;
+};
+
+export type NegotiationPrivateState = BuyerPrivateState | SellerPrivateState;
+
+type Context = WitnessContext<Ledger, NegotiationPrivateState>;
+
+const requireBuyer = (context: Context): BuyerPrivateState => {
+  if (context.privateState.role !== "buyer") {
+    throw new Error("buyer witness requires buyer private state");
+  }
+  return context.privateState;
+};
+
+const requireSeller = (context: Context): SellerPrivateState => {
+  if (context.privateState.role !== "seller") {
+    throw new Error("seller witness requires seller private state");
+  }
+  return context.privateState;
+};
+
+const requirePriceOpening = (state: SellerPrivateState): SellerPriceOpening => {
+  if (state.priceOpening === undefined) {
+    throw new Error("seller price opening is not available");
+  }
+  return state.priceOpening;
+};
+
+export const withSellerPriceOpening = (
+  state: SellerPrivateState,
+  priceOpening: SellerPriceOpening
+): SellerPrivateState => ({
+  ...state,
+  priceOpening
+});
+
+export const witnesses: Witnesses<NegotiationPrivateState> = {
+  buyerSecretKey: (context: Context) => {
+    const state = requireBuyer(context);
+    return [state, state.buyerSecretKey];
+  },
+  sellerSecretKey: (context: Context) => {
+    const state = requireSeller(context);
+    return [state, state.sellerSecretKey];
+  },
+  buyerCancelSecretKey: (context: Context) => {
+    const state = requireBuyer(context);
+    return [state, state.buyerSecretKey];
+  },
+  sellerCancelSecretKey: (context: Context) => {
+    const state = requireSeller(context);
+    return [state, state.sellerSecretKey];
+  },
+  buyerMaxPrice: (context: Context) => {
+    const state = requireBuyer(context);
+    return [state, state.buyerMaxPrice];
+  },
+  buyerLimitRandomness: (context: Context) => {
+    const state = requireBuyer(context);
+    return [state, state.buyerLimitRandomness];
+  },
+  agreedPrice: (context: Context) => {
+    const state = context.privateState;
+    const agreedPrice =
+      state.role === "buyer"
+        ? state.agreedPrice
+        : requirePriceOpening(state).agreedPrice;
+    return [state, agreedPrice];
+  },
+  priceRandomness: (context: Context) => {
+    const state = context.privateState;
+    const priceRandomness =
+      state.role === "buyer"
+        ? state.priceRandomness
+        : requirePriceOpening(state).priceRandomness;
+    return [state, priceRandomness];
+  },
+  sellerMinPrice: (context: Context) => {
+    const state = requireSeller(context);
+    return [state, state.sellerMinPrice];
+  },
+  sellerLimitRandomness: (context: Context) => {
+    const state = requireSeller(context);
+    return [state, state.sellerLimitRandomness];
+  }
 };

@@ -16,7 +16,13 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Counter, type CounterPrivateState, witnesses } from '@midnight-ntwrk/counter-contract';
+import {
+  Negotiation,
+  type NegotiationPrivateState,
+  type SellerPriceOpening,
+  withSellerPriceOpening,
+  witnesses,
+} from '@midnight-ntwrk/counter-contract';
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { unshieldedToken } from '@midnight-ntwrk/ledger-v8';
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js/contracts';
@@ -39,13 +45,13 @@ import { type Logger } from 'pino';
 import * as Rx from 'rxjs';
 import { WebSocket } from 'ws';
 import {
-  type CounterCircuits,
-  type CounterContract,
-  CounterPrivateStateId,
-  type CounterProviders,
-  type DeployedCounterContract,
+  type DeployedNegotiationContract,
+  type NegotiationCircuits,
+  type NegotiationContract,
+  NegotiationPrivateStateId,
+  type NegotiationProviders,
 } from './common-types';
-import { type Config, contractConfig } from './config';
+import { type Config, type RuntimeRole, contractConfig, privateStateStoreNameFor } from './config';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { assertIsContractAddress, toHex } from '@midnight-ntwrk/midnight-js/utils';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js/network-id';
@@ -64,9 +70,9 @@ let logger: Logger;
 // @ts-expect-error: It's needed to enable WebSocket usage through apollo
 globalThis.WebSocket = WebSocket;
 
-// Pre-compile the counter contract with ZK circuit assets
-const counterCompiledContract = CompiledContract.make('counter', Counter.Contract).pipe(
-  CompiledContract.withVacantWitnesses,
+// Pre-compile the negotiation contract with witnesses and ZK circuit assets.
+const negotiationCompiledContract = CompiledContract.make('negotiation', Negotiation.Contract).pipe(
+  CompiledContract.withWitnesses(witnesses),
   CompiledContract.withCompiledFileAssets(contractConfig.zkConfigPath),
 );
 
@@ -77,68 +83,107 @@ export interface WalletContext {
   unshieldedKeystore: UnshieldedKeystore;
 }
 
-export const getCounterLedgerState = async (
-  providers: CounterProviders,
-  contractAddress: ContractAddress,
-): Promise<bigint | null> => {
+export type NegotiationDeployment = {
+  dealId: Uint8Array;
+  buyerKey: Uint8Array;
+  buyerCommitment: Uint8Array;
+};
+
+const addressOf = (contract: DeployedNegotiationContract | ContractAddress): ContractAddress =>
+  typeof contract === 'string' ? contract : contract.deployTxData.public.contractAddress;
+
+export const getNegotiationLedgerState = async (
+  providers: NegotiationProviders,
+  contract: DeployedNegotiationContract | ContractAddress,
+): Promise<Negotiation.Ledger> => {
+  const contractAddress = addressOf(contract);
   assertIsContractAddress(contractAddress);
-  logger.info('Checking contract ledger state...');
-  const state = await providers.publicDataProvider
-    .queryContractState(contractAddress)
-    .then((contractState) => (contractState != null ? Counter.ledger(contractState.data).round : null));
-  logger.info(`Ledger state: ${state}`);
+  logger.info('Checking negotiation ledger state...');
+  const contractState = await providers.publicDataProvider.queryContractState(contractAddress);
+  if (contractState === null) {
+    throw new Error(`No negotiation contract is deployed at ${contractAddress}`);
+  }
+  const state = Negotiation.ledger(contractState.data);
+  logger.info(`Negotiation status: ${state.status}; final price: ${state.finalPrice}`);
   return state;
 };
 
-export const counterContractInstance: CounterContract = new Counter.Contract(witnesses);
+export const negotiationContractInstance: NegotiationContract = new Negotiation.Contract(witnesses);
 
 export const joinContract = async (
-  providers: CounterProviders,
+  providers: NegotiationProviders,
   contractAddress: string,
-): Promise<DeployedCounterContract> => {
-  const counterContract = await findDeployedContract(providers, {
+  privateState: NegotiationPrivateState,
+): Promise<DeployedNegotiationContract> => {
+  const negotiationContract = await findDeployedContract(providers, {
     contractAddress,
-    compiledContract: counterCompiledContract,
-    privateStateId: 'counterPrivateState',
-    initialPrivateState: { privateCounter: 0 },
+    compiledContract: negotiationCompiledContract,
+    privateStateId: NegotiationPrivateStateId,
+    initialPrivateState: privateState,
   });
-  logger.info(`Joined contract at address: ${counterContract.deployTxData.public.contractAddress}`);
-  return counterContract;
+  logger.info(`Attached to contract at address: ${negotiationContract.deployTxData.public.contractAddress}`);
+  return negotiationContract;
 };
 
 export const deploy = async (
-  providers: CounterProviders,
-  privateState: CounterPrivateState,
-): Promise<DeployedCounterContract> => {
-  logger.info('Deploying counter contract...');
-  const counterContract = await deployContract(providers, {
-    compiledContract: counterCompiledContract,
-    privateStateId: 'counterPrivateState',
+  providers: NegotiationProviders,
+  privateState: NegotiationPrivateState,
+  deployment: NegotiationDeployment,
+): Promise<DeployedNegotiationContract> => {
+  logger.info('Deploying negotiation contract...');
+  const negotiationContract = await deployContract(providers, {
+    compiledContract: negotiationCompiledContract,
+    privateStateId: NegotiationPrivateStateId,
     initialPrivateState: privateState,
+    args: [deployment.dealId, deployment.buyerKey, deployment.buyerCommitment],
   });
-  logger.info(`Deployed contract at address: ${counterContract.deployTxData.public.contractAddress}`);
-  return counterContract;
+  logger.info(`Deployed contract at address: ${negotiationContract.deployTxData.public.contractAddress}`);
+  return negotiationContract;
 };
 
-export const increment = async (counterContract: DeployedCounterContract): Promise<FinalizedTxData> => {
-  logger.info('Incrementing...');
-  const finalizedTxData = await counterContract.callTx.increment();
+const callCircuit = async (
+  contract: DeployedNegotiationContract,
+  circuit: keyof Pick<
+    DeployedNegotiationContract['callTx'],
+    'joinDeal' | 'authorizeHiddenPrice' | 'settle' | 'cancelAsBuyer' | 'cancelAsSeller'
+  >,
+): Promise<FinalizedTxData> => {
+  logger.info(`Calling ${circuit}...`);
+  const finalizedTxData = await contract.callTx[circuit]();
   logger.info(`Transaction ${finalizedTxData.public.txId} added in block ${finalizedTxData.public.blockHeight}`);
   return finalizedTxData.public;
 };
 
-export const displayCounterValue = async (
-  providers: CounterProviders,
-  counterContract: DeployedCounterContract,
-): Promise<{ counterValue: bigint | null; contractAddress: string }> => {
-  const contractAddress = counterContract.deployTxData.public.contractAddress;
-  const counterValue = await getCounterLedgerState(providers, contractAddress);
-  if (counterValue === null) {
-    logger.info(`There is no counter contract deployed at ${contractAddress}.`);
-  } else {
-    logger.info(`Current counter value: ${Number(counterValue)}`);
+export const joinDeal = (contract: DeployedNegotiationContract): Promise<FinalizedTxData> =>
+  callCircuit(contract, 'joinDeal');
+
+export const authorizeHiddenPrice = (contract: DeployedNegotiationContract): Promise<FinalizedTxData> =>
+  callCircuit(contract, 'authorizeHiddenPrice');
+
+export const settle = (contract: DeployedNegotiationContract): Promise<FinalizedTxData> =>
+  callCircuit(contract, 'settle');
+
+export const cancelAsBuyer = (contract: DeployedNegotiationContract): Promise<FinalizedTxData> =>
+  callCircuit(contract, 'cancelAsBuyer');
+
+export const cancelAsSeller = (contract: DeployedNegotiationContract): Promise<FinalizedTxData> =>
+  callCircuit(contract, 'cancelAsSeller');
+
+export const storeSellerPriceOpening = async (
+  providers: NegotiationProviders,
+  contractAddress: string,
+  priceOpening: SellerPriceOpening,
+): Promise<void> => {
+  assertIsContractAddress(contractAddress);
+  providers.privateStateProvider.setContractAddress(contractAddress);
+  const currentState = await providers.privateStateProvider.get(NegotiationPrivateStateId);
+  if (currentState === null || currentState.role !== 'seller') {
+    throw new Error('seller price opening requires seller private state');
   }
-  return { contractAddress, counterValue };
+  await providers.privateStateProvider.set(
+    NegotiationPrivateStateId,
+    withSellerPriceOpening(currentState, priceOpening),
+  );
 };
 
 /**
@@ -306,6 +351,11 @@ const deriveKeysFromSeed = (seed: string) => {
   return derivationResult.keys;
 };
 
+export const getUnshieldedAddressForSeed = (seed: string): string => {
+  const keys = deriveKeysFromSeed(seed);
+  return createKeystore(keys[Roles.NightExternal], getNetworkId()).getBech32Address().toString();
+};
+
 /**
  * Formats a token balance for display (e.g. 1000000000 -> "1,000,000,000").
  */
@@ -427,17 +477,16 @@ ${DIV}`);
 };
 
 /**
- * Build (or restore) a wallet from a hex seed, then wait for the wallet
- * to sync and receive funds before returning.
+ * Build (or restore) a wallet from a hex seed and wait only for network sync.
+ * This allows a role process to publish its public address before a separate
+ * bootstrap process funds it.
  *
  * Steps:
  *   1. Derive HD keys (Zswap, NightExternal, Dust) from the seed
  *   2. Create the three sub-wallets (Shielded, Unshielded, Dust)
  *   3. Start the WalletFacade and wait for sync
- *   4. Display a wallet summary with all addresses
- *   5. If balance is zero, wait for incoming funds (e.g. from faucet)
  */
-export const buildWalletAndWaitForFunds = async (config: Config, seed: string): Promise<WalletContext> => {
+export const buildWalletAndWaitForSync = async (config: Config, seed: string): Promise<WalletContext> => {
   console.log('');
 
   // Derive HD keys and initialize the three sub-wallets
@@ -489,20 +538,29 @@ ${DIV}
   // Wait for the wallet to sync with the network
   const syncedState = await withStatus('Syncing with network', () => waitForSync(wallet));
 
-  // Display the full wallet summary with all addresses and balances
   printWalletSummary(syncedState, unshieldedKeystore);
+
+  return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
+};
+
+/**
+ * Build a synced wallet, then wait for NIGHT and prepare DUST for fees.
+ */
+export const buildWalletAndWaitForFunds = async (config: Config, seed: string): Promise<WalletContext> => {
+  const context = await buildWalletAndWaitForSync(config, seed);
+  const syncedState = await waitForSync(context.wallet);
 
   // Check if wallet has funds; if not, wait for incoming tokens
   const balance = syncedState.unshielded.balances[unshieldedToken().raw] ?? 0n;
   if (balance === 0n) {
-    const fundedBalance = await withStatus('Waiting for incoming tokens', () => waitForFunds(wallet));
+    const fundedBalance = await withStatus('Waiting for incoming tokens', () => waitForFunds(context.wallet));
     console.log(`    Balance: ${formatBalance(fundedBalance)} tNight\n`);
   }
 
   // Register NIGHT UTXOs for dust generation (required for tx fees on Preprod/Preview)
-  await registerForDustGeneration(wallet, unshieldedKeystore);
+  await registerForDustGeneration(context.wallet, context.unshieldedKeystore);
 
-  return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
+  return context;
 };
 
 /**
@@ -526,17 +584,17 @@ ${DIV}
  * Configure all midnight-js providers needed for contract deployment and interaction.
  * This wires together the wallet, proof server, indexer, and private state storage.
  */
-export const configureProviders = async (ctx: WalletContext, config: Config) => {
+export const configureProviders = async (ctx: WalletContext, config: Config, role: RuntimeRole) => {
   const walletAndMidnightProvider = await createWalletAndMidnightProvider(ctx);
-  const zkConfigProvider = new NodeZkConfigProvider<CounterCircuits>(contractConfig.zkConfigPath);
+  const zkConfigProvider = new NodeZkConfigProvider<NegotiationCircuits>(contractConfig.zkConfigPath);
   // accountId and privateStoragePasswordProvider are required by levelPrivateStateProvider.
   // The coin public key is encoded as base64 for the password — base64 output covers all
   // four character classes and avoids repeated-character runs found in raw hex strings.
   const accountId = walletAndMidnightProvider.getCoinPublicKey();
   const storagePassword = `${Buffer.from(accountId, 'hex').toString('base64')}!`;
   return {
-    privateStateProvider: levelPrivateStateProvider<typeof CounterPrivateStateId>({
-      privateStateStoreName: contractConfig.privateStateStoreName,
+    privateStateProvider: levelPrivateStateProvider<typeof NegotiationPrivateStateId>({
+      privateStateStoreName: privateStateStoreNameFor(role),
       accountId,
       privateStoragePasswordProvider: () => storagePassword,
     }),
