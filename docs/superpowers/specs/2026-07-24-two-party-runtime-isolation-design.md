@@ -5,11 +5,13 @@
 
 ## Goal
 
-Demonstrate that a distrustful buyer and seller can execute the Midnight negotiation protocol without either runtime learning the other party's private limit, limit randomness, role secret, wallet seed, or private state.
+Demonstrate that a buyer and seller who do not disclose their policy inputs to each other can execute the Midnight negotiation protocol without either audited role runtime receiving the other party's private limit, limit randomness, role secret, wallet seed, or private state.
+
+The threat boundary is application data flow, not a hostile-code sandbox on the presentation laptop. The demo trusts the host OS and the reviewed Buyer/Seller binaries. It does not claim that a malicious sibling process running as the same Unix user cannot probe another role's files or memory. A production deployment places each runtime on its party's own host or in a separately administered container.
 
 The presentation claim supported by this design is:
 
-> The buyer and seller ran in separate processes, with separate wallets, private-state stores, witness data, and local proof servers. Each process generated its own proof without receiving the other party's private limit.
+> The audited buyer and seller runtimes ran in separate processes, with separate wallets, private-state stores, witness data, and local proof servers. Each process generated its own proof without receiving the other party's private limit through the application protocol.
 
 ## Trust boundary
 
@@ -100,7 +102,7 @@ The staged flow is:
 1. Buyer generates its own secrets and deploys `createDeal`.
 2. Buyer sends `ContractReady { contractAddress }`.
 3. Seller generates its own secrets, attaches, and calls `joinDeal`.
-4. Buyer and Seller exchange `Proposal` messages.
+4. Buyer sends a `Proposal`; Seller checks it against its local policy and accepts it.
 5. Buyer calls `authorizeHiddenPrice`.
 6. Buyer sends `PriceOpening { dealId, price, priceRandomness }`.
 7. Seller updates only its local private state and calls `settle`.
@@ -216,6 +218,8 @@ The integration test must assert:
 
 A single command checks Docker services, both wallets, balances, DUST, proof-server endpoints, process separation, and public indexer reachability before opening the three presentation terminals.
 
+The orchestrator does not send the `START` message that permits deployment until both audited role runtimes report wallet readiness and the parent independently confirms distinct PIDs, public wallet addresses, private-store identifiers, and proof-server endpoints.
+
 ## Scope
 
 Included:
@@ -230,6 +234,7 @@ Included:
 Excluded:
 
 - separate physical computers;
+- hostile-code isolation between sibling processes running under the same host user;
 - hiding proposals or `(p, r_P)` from the Relay;
 - production key custody;
 - encrypted peer-to-peer transport;

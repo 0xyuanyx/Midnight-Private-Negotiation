@@ -12,7 +12,7 @@ const connect = (buyer: BuyerAgent, seller: SellerAgent): InMemoryRelay => {
   return relay;
 };
 
-describe("De-Butler agent negotiation", () => {
+describe("Private agent negotiation", () => {
   it("settles a price inside both private policy limits", () => {
     const buyer = new BuyerAgent({ maxPrice: 110n, openingOffer: 100n });
     const seller = new SellerAgent({ minPrice: 95n });

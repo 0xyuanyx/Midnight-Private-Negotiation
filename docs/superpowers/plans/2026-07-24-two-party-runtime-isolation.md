@@ -32,7 +32,7 @@
 - Produces: `BuyerPrivateState`, `SellerPrivateState`, `NegotiationPrivateState`, `withSellerPriceOpening(state, opening)`.
 - Produces: the existing exported `witnesses` object, now guarded by `state.role`.
 
-- [ ] **Step 1: Write failing witness-isolation tests**
+- [x] **Step 1: Write failing witness-isolation tests**
 
 ```ts
 it("rejects seller witness access from buyer state", () => {
@@ -48,7 +48,7 @@ it("rejects settlement values before the seller receives an opening", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 Run:
 
@@ -59,7 +59,7 @@ npm test -- --run src/test/witnesses.test.ts
 
 Expected: FAIL because the role-specific types and guards do not exist.
 
-- [ ] **Step 3: Implement the discriminated state union**
+- [x] **Step 3: Implement the discriminated state union**
 
 ```ts
 export type BuyerPrivateState = {
@@ -91,11 +91,11 @@ export type NegotiationPrivateState =
 
 Add role guards that throw fixed, value-free messages. Buyer witnesses read only Buyer state. Seller witnesses read only Seller state. `agreedPrice` and `priceRandomness` accept Buyer state or Seller state with `priceOpening`.
 
-- [ ] **Step 4: Split the simulator into Buyer and Seller circuit contexts**
+- [x] **Step 4: Split the simulator into Buyer and Seller circuit contexts**
 
 Use a Buyer context for constructor and `authorizeHiddenPrice`. Before `joinDeal`, replace only the context's private state with Seller state; before authorization restore Buyer state; before settlement use Seller state with the price opening. Preserve the public contract state and ZSwap state between calls.
 
-- [ ] **Step 5: Run contract verification and verify GREEN**
+- [x] **Step 5: Run contract verification and verify GREEN**
 
 ```bash
 cd contract
@@ -117,7 +117,7 @@ Expected: 11 or more tests pass with no lint errors.
 - Produces: `IsolationMessage`, `parseIsolationMessage(value: unknown): IsolationMessage`, `relayAudit(message): RelayAudit`.
 - Consumes: no wallet, contract, or private-state types.
 
-- [ ] **Step 1: Write failing protocol tests**
+- [x] **Step 1: Write failing protocol tests**
 
 ```ts
 expect(parseIsolationMessage({
@@ -138,7 +138,7 @@ expect(() => parseIsolationMessage({
 
 Cover valid `CONTRACT_READY`, `PROPOSAL`, and `PRICE_OPENING`, every forbidden key, unknown keys, invalid hex, and invalid decimal prices.
 
-- [ ] **Step 2: Run the focused tests and verify RED**
+- [x] **Step 2: Run the focused tests and verify RED**
 
 ```bash
 cd counter-cli
@@ -147,7 +147,7 @@ npx vitest run src/isolation/protocol.test.ts
 
 Expected: FAIL because `protocol.ts` does not exist.
 
-- [ ] **Step 3: Implement an exact-key runtime parser**
+- [x] **Step 3: Implement an exact-key runtime parser**
 
 ```ts
 export type IsolationMessage =
@@ -163,7 +163,7 @@ export type IsolationMessage =
 
 For each message kind, compare `Object.keys(value).sort()` to the exact allowed key set. Reject forbidden and unknown keys before validating values. `relayAudit` returns only `{ type, keys }`.
 
-- [ ] **Step 4: Run focused and static verification**
+- [x] **Step 4: Run focused and static verification**
 
 ```bash
 cd counter-cli
@@ -186,7 +186,7 @@ Expected: all protocol tests pass and no lint errors.
 - Produces: `configureProviders(ctx, config, role): Promise<NegotiationProviders>`.
 - Produces: `storeSellerPriceOpening(providers, contractAddress, opening): Promise<void>`.
 
-- [ ] **Step 1: Write failing role-provider tests**
+- [x] **Step 1: Write failing role-provider tests**
 
 Use a fake `PrivateStateProvider` to verify:
 
@@ -208,7 +208,7 @@ expect(provider.set).toHaveBeenCalledWith(
 
 Also verify Buyer state is rejected and that role-specific store names differ.
 
-- [ ] **Step 2: Run focused tests and verify RED**
+- [x] **Step 2: Run focused tests and verify RED**
 
 ```bash
 cd counter-cli
@@ -217,7 +217,7 @@ npx vitest run src/isolation/providers.test.ts
 
 Expected: FAIL because role configuration and opening storage do not exist.
 
-- [ ] **Step 3: Add role-specific provider configuration**
+- [x] **Step 3: Add role-specific provider configuration**
 
 ```ts
 export const privateStateStoreNameFor = (role: RuntimeRole): string =>
@@ -226,11 +226,11 @@ export const privateStateStoreNameFor = (role: RuntimeRole): string =>
 
 Pass this name to `levelPrivateStateProvider`. Keep account IDs and storage passwords wallet-specific.
 
-- [ ] **Step 4: Implement Seller opening storage**
+- [x] **Step 4: Implement Seller opening storage**
 
 Scope the provider with `setContractAddress`, read the existing state, assert `role === "seller"`, produce a new object through `withSellerPriceOpening`, and store it under `NegotiationPrivateStateId`.
 
-- [ ] **Step 5: Update existing callers and verify**
+- [x] **Step 5: Update existing callers and verify**
 
 The single-runtime compatibility CLI uses role `"buyer"` only until Task 5 replaces it. The integration test creates explicit Buyer and Seller providers.
 
@@ -260,15 +260,15 @@ Expected: all commands exit zero.
 - Produces: `fundWallet(funder, receiverAddress, amount): Promise<string>`.
 - Produces: `loadOrCreateRoleSeed(role, directory): Promise<string>`, called only inside a role process.
 
-- [ ] **Step 1: Add separate proof-server services**
+- [x] **Step 1: Add separate proof-server services**
 
 Define `buyer-proof-server` and `seller-proof-server`, both using `midnightntwrk/proof-server:8.0.3`, with dynamic host ports and the existing health check. Remove the single `proof-server` service.
 
-- [ ] **Step 2: Split wallet sync from funding**
+- [x] **Step 2: Split wallet sync from funding**
 
 Refactor the current wallet builder so it can return a synced zero-balance wallet before `waitForFunds`. Keep `buildWalletAndWaitForFunds` as a compatibility wrapper.
 
-- [ ] **Step 3: Add role-local seed persistence**
+- [x] **Step 3: Add role-local seed persistence**
 
 Each role process calls `loadOrCreateRoleSeed` inside its own address space. It creates a 32-byte seed with `generateRandomSeed`, writes it with owner-only permissions, and restores it on later runs. The orchestrator passes only the role directory path and never reads the seed file.
 
@@ -279,7 +279,7 @@ Ignore the following paths:
 .demo-private-state/
 ```
 
-- [ ] **Step 4: Add the funding helper**
+- [x] **Step 4: Add the funding helper**
 
 Decode the receiver with:
 
@@ -292,11 +292,11 @@ const receiver = MidnightBech32m.parse(receiverAddress).decode(
 
 Create an unshielded NIGHT transfer with `wallet.transferTransaction`, sign the recipe using the funder's unshielded keystore, finalize it, and submit it. The helper accepts only a public address and amount.
 
-- [ ] **Step 5: Extend `TestEnvironment`**
+- [x] **Step 5: Extend `TestEnvironment`**
 
 Map both proof-server endpoints and expose them as Buyer and Seller public configs. The environment owns only the Compose services. Role wallets are created and stopped inside their child processes. A separate bootstrap child owns the standalone genesis seed, receives only role public addresses and transfer amounts, funds both roles, and exits before negotiation.
 
-- [ ] **Step 6: Verify container and wallet preparation**
+- [x] **Step 6: Verify container and wallet preparation**
 
 ```bash
 cd counter-cli
@@ -326,11 +326,11 @@ Expected: four services (`buyer-proof-server`, `seller-proof-server`, `node`, `i
 - Observer consumes node/indexer configuration and a contract address only.
 - Orchestrator forwards only parsed `IsolationMessage` values and public readiness metadata.
 
-- [ ] **Step 1: Write the failing multi-process test**
+- [x] **Step 1: Write the failing multi-process test**
 
 Assert different PIDs, wallet addresses, store names, and proof endpoints. Assert Relay audit contains no forbidden field. Assert the final lifecycle and price.
 
-- [ ] **Step 2: Run it and verify RED**
+- [x] **Step 2: Run it and verify RED**
 
 ```bash
 cd counter-cli
@@ -339,23 +339,23 @@ npx vitest run src/isolation/two-party.api.test.ts
 
 Expected: FAIL because role runtimes and orchestrator do not exist.
 
-- [ ] **Step 3: Implement Buyer runtime**
+- [x] **Step 3: Implement Buyer runtime**
 
 Generate `B`, `r_B`, role secret, `p`, and `r_P` inside the child. Build Buyer providers, deploy, emit `CONTRACT_READY`, wait for Seller `OPEN`, authorize, and emit `PRICE_OPENING`. Emit only redacted runtime metadata.
 
-- [ ] **Step 4: Implement Seller runtime**
+- [x] **Step 4: Implement Seller runtime**
 
 Generate `S`, `r_S`, and the Seller role secret inside the child. Attach after `CONTRACT_READY`, call `joinDeal`, validate `PRICE_OPENING`, update Seller private state, and call `settle`. Emit only redacted runtime metadata.
 
-- [ ] **Step 5: Implement the orchestrator**
+- [x] **Step 5: Implement the orchestrator**
 
 Spawn Buyer, Seller, Funder, and Observer with Node child-process IPC. After Buyer and Seller report only their public addresses, ask Funder to transfer NIGHT and exit. Route every negotiation message through `parseIsolationMessage`. Keep a field-name-only audit. On invalid messages or child failure, terminate all live children and report a value-free error.
 
-- [ ] **Step 6: Implement the public Observer**
+- [x] **Step 6: Implement the public Observer**
 
 After `CONTRACT_READY`, query only public indexer state and emit status, commitment prefixes, block metadata, and final price. The Observer process receives no wallet seed, private-state path, or proof-server URL.
 
-- [ ] **Step 7: Add scripts**
+- [x] **Step 7: Add scripts**
 
 ```json
 {
@@ -364,7 +364,7 @@ After `CONTRACT_READY`, query only public indexer state and emit status, commitm
 }
 ```
 
-- [ ] **Step 8: Run the actual standalone test**
+- [x] **Step 8: Run the actual standalone test**
 
 ```bash
 cd counter-cli
@@ -383,15 +383,15 @@ Expected: Buyer and Seller run with different process/runtime identities and the
 **Interfaces:**
 - Produces: `npm run demo:preflight`.
 
-- [ ] **Step 1: Implement preflight checks**
+- [x] **Step 1: Implement preflight checks**
 
 Check node health, indexer query reachability, both proof-server `/version` endpoints, two distinct wallet addresses, non-zero NIGHT, non-zero DUST, different private-state stores, and different process IDs. Print no private values.
 
-- [ ] **Step 2: Document the claim and limitations**
+- [x] **Step 2: Document the claim and limitations**
 
 Document that node/indexer are shared, proving and private state are role-local, Relay sees proposals and `(p, r_P)`, and the demo runs on one laptop rather than two physical machines.
 
-- [ ] **Step 3: Run full verification**
+- [x] **Step 3: Run full verification**
 
 ```bash
 export PATH="/Users/taemin/.local/bin:$PATH"

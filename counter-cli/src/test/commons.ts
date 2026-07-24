@@ -35,6 +35,7 @@ export interface TestConfiguration {
   seed: string;
   entrypoint: string;
   dappConfig: Config;
+  sellerDappConfig: Config;
   psMode: string;
   cacheFileName: string;
 }
@@ -45,6 +46,7 @@ export class LocalTestConfig implements TestConfiguration {
   psMode = 'undeployed';
   cacheFileName = '';
   dappConfig = new StandaloneConfig();
+  sellerDappConfig = new StandaloneConfig();
 }
 
 export function parseArgs(required: string[]): TestConfiguration {
@@ -96,6 +98,7 @@ export function parseArgs(required: string[]): TestConfiguration {
     seed,
     entrypoint: entry,
     dappConfig: cfg,
+    sellerDappConfig: cfg,
     psMode,
     cacheFileName,
   };
@@ -106,6 +109,7 @@ export class TestEnvironment {
   private env: StartedDockerComposeEnvironment | undefined;
   private dockerEnv: DockerComposeEnvironment | undefined;
   private container: StartedTestContainer | undefined;
+  private sellerContainer: StartedTestContainer | undefined;
   private walletCtx: WalletContext | undefined;
   private testConfig: TestConfiguration;
 
@@ -117,12 +121,16 @@ export class TestEnvironment {
   start = async (): Promise<TestConfiguration> => {
     if (process.env.RUN_ENV_TESTS === 'true') {
       this.testConfig = parseArgs(['seed', 'env']);
-      this.logger.info(`Test wallet seed: ${this.testConfig.seed}`);
       this.logger.info('Proof server starting...');
       this.container = await TestEnvironment.getProofServerContainer(this.testConfig.psMode);
+      this.sellerContainer = await TestEnvironment.getProofServerContainer(this.testConfig.psMode);
       this.testConfig.dappConfig = {
         ...this.testConfig.dappConfig,
         proofServer: `http://${this.container.getHost()}:${this.container.getMappedPort(6300).toString()}`,
+      };
+      this.testConfig.sellerDappConfig = {
+        ...this.testConfig.sellerDappConfig,
+        proofServer: `http://${this.sellerContainer.getHost()}:${this.sellerContainer.getMappedPort(6300).toString()}`,
       };
     } else {
       this.testConfig = new LocalTestConfig();
@@ -131,10 +139,17 @@ export class TestEnvironment {
       this.logger.info(`Using compose file: ${composeFile}`);
       this.dockerEnv = new DockerComposeEnvironment(path.resolve(currentDir, '..'), composeFile)
         .withWaitStrategy(
-          'counter-proof-server',
-          Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1),
+          'negotiation-buyer-proof-server',
+          Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1).withStartupTimeout(1000 * 60 * 5),
         )
-        .withWaitStrategy('counter-indexer', Wait.forLogMessage(/starting indexing/, 1));
+        .withWaitStrategy(
+          'negotiation-seller-proof-server',
+          Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1).withStartupTimeout(1000 * 60 * 5),
+        )
+        .withWaitStrategy(
+          'counter-indexer',
+          Wait.forLogMessage(/starting indexing/, 1).withStartupTimeout(1000 * 60 * 5),
+        );
       this.env = await this.dockerEnv.up();
 
       this.testConfig.dappConfig = {
@@ -145,11 +160,29 @@ export class TestEnvironment {
         proofServer: TestEnvironment.mapContainerPort(
           this.env,
           this.testConfig.dappConfig.proofServer,
-          'counter-proof-server',
+          'negotiation-buyer-proof-server',
+        ),
+      };
+      this.testConfig.sellerDappConfig = {
+        ...this.testConfig.sellerDappConfig,
+        indexer: this.testConfig.dappConfig.indexer,
+        indexerWS: this.testConfig.dappConfig.indexerWS,
+        node: this.testConfig.dappConfig.node,
+        proofServer: TestEnvironment.mapContainerPort(
+          this.env,
+          this.testConfig.sellerDappConfig.proofServer,
+          'negotiation-seller-proof-server',
         ),
       };
     }
-    this.logger.info(`Configuration:${JSON.stringify(this.testConfig)}`);
+    this.logger.info(
+      `Public configuration:${JSON.stringify({
+        entrypoint: this.testConfig.entrypoint,
+        psMode: this.testConfig.psMode,
+        dappConfig: this.testConfig.dappConfig,
+        sellerDappConfig: this.testConfig.sellerDappConfig,
+      })}`,
+    );
     this.logger.info('Test containers started');
     return this.testConfig;
   };
@@ -169,6 +202,7 @@ export class TestEnvironment {
       .withCommand(['midnight-proof-server -v'])
       .withEnvironment({ RUST_BACKTRACE: 'full' })
       .withWaitStrategy(Wait.forLogMessage('Actix runtime found; starting in Actix runtime', 1))
+      .withStartupTimeout(1000 * 60 * 5)
       .start();
 
   shutdown = async () => {
@@ -182,6 +216,10 @@ export class TestEnvironment {
     if (this.container !== undefined) {
       this.logger.info('Test container closing');
       await this.container.stop();
+    }
+    if (this.sellerContainer !== undefined) {
+      this.logger.info('Seller test container closing');
+      await this.sellerContainer.stop();
     }
   };
 

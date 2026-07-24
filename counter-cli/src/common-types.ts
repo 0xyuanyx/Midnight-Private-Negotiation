@@ -13,17 +13,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Counter, type CounterPrivateState } from '@midnight-ntwrk/counter-contract';
+import { Negotiation, type NegotiationPrivateState } from '@midnight-ntwrk/counter-contract';
 import type { MidnightProviders } from '@midnight-ntwrk/midnight-js/types';
 import type { DeployedContract, FoundContract } from '@midnight-ntwrk/midnight-js/contracts';
 import type { ProvableCircuitId } from '@midnight-ntwrk/compact-js';
 
-export type CounterCircuits = ProvableCircuitId<Counter.Contract<CounterPrivateState>>;
+export type NegotiationCircuits = ProvableCircuitId<Negotiation.Contract<NegotiationPrivateState>>;
 
-export const CounterPrivateStateId = 'counterPrivateState';
+export const NegotiationPrivateStateId = 'negotiationPrivateState';
 
-export type CounterProviders = MidnightProviders<CounterCircuits, typeof CounterPrivateStateId, CounterPrivateState>;
+export type NegotiationProviders = MidnightProviders<
+  NegotiationCircuits,
+  typeof NegotiationPrivateStateId,
+  NegotiationPrivateState
+>;
 
-export type CounterContract = Counter.Contract<CounterPrivateState>;
+export type NegotiationContract = Negotiation.Contract<NegotiationPrivateState>;
 
-export type DeployedCounterContract = DeployedContract<CounterContract> | FoundContract<CounterContract>;
+export type DeployedNegotiationContract = DeployedContract<NegotiationContract> | FoundContract<NegotiationContract>;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two-terminal De-Butler negotiation demo.
+"""Two-terminal private negotiation demo.
 
 This is a learning prototype for the presentation flow. It does not call
 Midnight yet; the two [Mock ZK] messages mark where the real contract calls
@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Any
 
 HOST = "127.0.0.1"
-PORT = int(os.environ.get("DEBUTLER_DEMO_PORT", "8765"))
+PORT = int(os.environ.get("NEGOTIATION_DEMO_PORT", "8765"))
 
 
 def money(value: int | str) -> str:

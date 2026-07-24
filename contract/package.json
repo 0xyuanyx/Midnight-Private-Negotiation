@@ -16,10 +16,10 @@
     }
   },
   "scripts": {
-    "compact": "compact compile src/debutler.compact src/managed/debutler",
+    "compact": "compact compile src/negotiation.compact src/managed/negotiation",
     "test": "vitest run",
     "test:compile": "npm run compact && vitest run",
-    "build": "rm -rf dist && tsc --project tsconfig.build.json && cp -Rf ./src/managed ./dist/managed && cp ./src/debutler.compact ./dist",
+    "build": "rm -rf dist && tsc --project tsconfig.build.json && cp -Rf ./src/managed ./dist/managed && cp ./src/negotiation.compact ./dist",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }

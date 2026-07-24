@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "demo:isolated": "npm run demo:isolated --workspace @midnight-ntwrk/counter-cli",
+    "demo:preflight": "npm run demo:preflight --workspace @midnight-ntwrk/counter-cli",
     "test:agents": "vitest run agents/demo.test.ts",
     "demo": "node --experimental-strip-types agents/demo.ts"
   },
