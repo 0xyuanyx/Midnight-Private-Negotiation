@@ -6,7 +6,7 @@
 
 **대상:** 새 3패널 웹 DApp, 역할별 에이전트 런타임, 암호화 Room Relay, Midnight 계약·Observer
 
-**이전 버전:** 기존 구현은 [`../../../v1/README.md`](../../../v1/README.md)에 보존한다.
+**이전 버전:** 기존 구현은 로컬 작업 공간의 `v1/`에만 보존하며 Git 추적과 원격 저장소에서는 제외한다.
 
 ## 1. 목적
 
@@ -27,14 +27,15 @@ p <= 구매자 최대 한도
 
 ## 2. 버전 경계와 저장소 구조
 
-Counter 예제를 기반으로 만든 기존 데모는 `v1/` 아래에 실행 가능한 상태로 보존한다. 새 코드에서는 `counter`, `counter-cli`, `example-counter` 같은 레거시 명칭을 사용하지 않는다.
+Counter 예제를 기반으로 만든 기존 데모는 로컬 작업 공간의 `v1/` 아래에 실행 가능한 상태로 보존한다. `v1/`은 `.gitignore`로 제외하며 원격 저장소에는 v2 코드와 문서만 유지한다. 새 코드에서는 `counter`, `counter-cli`, `example-counter` 같은 레거시 명칭을 사용하지 않는다.
 
 ```text
 .
-├── v1/                              # 기존 Python·Midnight.js·Compact 데모
+├── v1/                              # 로컬 전용 기존 데모(gitignored)
 ├── apps/
 │   └── demo-web/                    # 새 3패널 웹 DApp
 ├── packages/
+│   ├── agent-core/                   # 한도 비인지 GPT mock·로컬 PolicyGuard
 │   ├── demo-controller/             # 실행 제어와 정제된 화면 이벤트 중계
 │   ├── buyer-runtime/               # Buyer private state·GPT·PolicyGuard
 │   ├── seller-runtime/              # Seller private state·GPT·PolicyGuard
@@ -49,7 +50,7 @@ Counter 예제를 기반으로 만든 기존 데모는 `v1/` 아래에 실행 �
 
 `apps/`와 `packages/`는 구현 계획 승인 후 생성한다.
 
-### 현재 v1 구현 기준
+### 로컬 v1 아카이브 구현 기준
 
 - `v1/agents/buyer.ts`와 `v1/agents/seller.ts`를 사용하는 경량 데모·단위 테스트는 한 Node.js 프로세스 안에서 두 객체를 함께 실행한다.
 - 실제 Midnight 통합 경로인 `v1/counter-cli/src/isolation/orchestrator.ts`는 `buyer-runtime.ts`, `seller-runtime.ts`, `observer-runtime.ts`를 각각 `child_process.fork()`로 실행한다.
@@ -512,50 +513,71 @@ PRE_START
 
 ```ts
 type DemoEvent = {
-  id: string;
+  protocolVersion: 1;
+  eventId: string;
   occurredAt: string;
   panel: "buyer" | "seller" | "observer";
+  sessionId: string;
   audience: "ROLE_LOCAL" | "PARTICIPANTS" | "PUBLIC";
   state:
     | "ROOM_JOINED"
+    | "PEER_JOINED"
     | "LIMIT_LOCKED"
     | "WAITING_PEER"
     | "PEER_READY"
-    | "COMMITTING"
+    | "COMMITMENT_CREATED"
+    | "PEER_COMMITMENT_REGISTERED"
+    | "OPEN"
     | "NEGOTIATING"
-    | "BUYER_VERIFYING"
-    | "SELLER_VERIFYING"
+    | "NEGOTIATION_COMPLETE"
+    | "VERIFYING"
+    | "PROOFS_COMPLETE"
+    | "AGREED"
     | "AUTHORIZED"
     | "SETTLED"
     | "CANCELLED"
-    | "ERROR";
+    | "ERROR"
+    | "STOPPED";
   messageCode: string;
+  correlationId?: string;
+  replaceKey?: string;
+  agreedAmount?: string;
   publicAmount?: string;
 };
 ```
 
 - `publicAmount`는 `SETTLED` 이벤트에서만 허용한다.
+- `agreedAmount`는 Buyer·Seller의 `AGREED` 공동 이벤트에서만 허용하며 Observer에는 전달하지 않는다.
+- `correlationId`는 Buyer·Seller 공동 이벤트의 동일 시각·동일 원인을 검증한다.
+- `replaceKey`는 대기 스피너 행을 완료 행으로 교체하기 위한 화면 식별자다.
 - `ROLE_LOCAL`은 자기 한도 저장·상대 입력 대기처럼 해당 역할에만 보이는 이벤트다.
 - `PARTICIPANTS`는 양쪽 입력 완료·협상 진행처럼 Buyer와 Seller가 공유하는 이벤트다.
 - `PUBLIC`은 Observer가 표시하는 공개 계약 이벤트다.
-- 웹은 `audience`를 표시 색상에 매핑하되, 색만으로 범위를 표현하지 않고 메시지 문구도 함께 사용한다.
+- `audience`는 라우팅 범위이며 문장 전체 색을 결정하지 않는다.
 - UI가 `messageCode`를 한국어 문구로 변환한다.
 - 자유 형식 예외 메시지, stack trace, 주소, commitment 원문을 그대로 렌더링하지 않는다.
-- 모든 사용자용 로그는 `[HH:mm:ss] [SYSTEM] 메시지` 형식이다.
+- 모든 사용자용 로그는 `[HH:mm:ss] 메시지` 형식이다.
+- 모든 표시 이벤트가 시스템 출력이므로 `[SYSTEM]`, `[BUYER]`, `[SELLER]` 태그를 사용하지 않는다.
 - `[PROOF]`, `[CHAIN]`, PID, wallet, prover, raw status 번호는 표시하지 않는다.
+- 입력 프롬프트는 로그의 마지막 줄에만 표시하며 Enter 후 입력 줄을 삭제한다. 상품 코드와 자기 한도는 상단 고정 상태 줄에만 반영한다.
+- 일반 문장은 `#FFFFFF`, 시간은 `#A8A8A8`, 비공개 입력 라벨은 `#D0B36C`다.
+- 화면에 표시되는 `commitment`, `OPEN`, `AUTHORIZED` 같은 프로토콜 토큰만 `#9A9AFF`로 표시한다. 내부 `createDeal`, `joinDeal` 이벤트는 브라우저 스트림에서 제외한다.
+- Observer의 `SETTLED · 최종 금액` 한 줄만 `#9FB8A3`로 표시한다.
 
 ### 진행 로그
 
 ```text
-[09:41:02] [SYSTEM] 상품 코드 4821 협상방에 입장했습니다.
-[09:41:08] [SYSTEM] 구매자 조건을 로컬 비공개 상태에 저장했습니다.
-[09:41:09] [SYSTEM] 상대방의 입력을 기다리고 있습니다.
-[09:41:11] [SYSTEM] 양쪽 조건 입력이 완료되었습니다.
-[09:41:12] [SYSTEM] 거래 생성을 준비하고 있습니다.
-[09:41:18] [SYSTEM] AI 에이전트가 비공개로 협상하고 있습니다. ⠋
-[09:41:24] [SYSTEM] 구매자 조건을 공개하지 않고 증명하고 있습니다.
-[09:41:31] [SYSTEM] 구매자 조건 증명이 완료되었습니다.
-[09:41:36] [SYSTEM] 판매자 조건을 공개하지 않고 증명하고 있습니다.
+[09:41:02] 상품 코드 4821 협상방에 입장했습니다.
+[09:41:03] 판매자의 거래 참여를 기다리고 있습니다. ⠋
+[09:41:08] 구매자 조건을 로컬 비공개 상태에 저장했습니다.
+[09:41:08] 구매자 commitment를 생성했습니다.
+[09:41:09] 판매자 commitment 등록을 기다리고 있습니다. ⠋
+[09:41:12] 판매자 commitment가 등록되었습니다.
+[09:41:13] 협상을 시작합니다. ⠋
+[09:41:13] AI 에이전트가 비공개로 협상하고 있습니다. ⠋
+[09:41:18] AI 에이전트의 비공개 협상이 완료되었습니다.
+[09:41:18] 모든 조건을 공개하지 않고 증명하고 있습니다. ⠋
+[09:41:24] 모든 조건 증명이 완료되었습니다.
 ```
 
 진행 중 스피너는 한 줄에서 갱신하고 완료 시 다음 상태 로그로 교체한다. 폐기된 GPT 후보, 재요청, 제안 가격, 상대 응답 원문은 표시하지 않는다.
@@ -563,9 +585,9 @@ type DemoEvent = {
 ### Observer 공개 상태 로그
 
 ```text
-[09:41:18] [SYSTEM] OPEN
-[09:41:43] [SYSTEM] AUTHORIZED · 가격 커밋 등록(금액 비공개)
-[09:41:51] [SYSTEM] SETTLED · 100,000 KRW
+[09:41:13] OPEN
+[09:41:24] AUTHORIZED · 가격 commitment 등록됨 · 금액 비공개
+[09:41:31] SETTLED · 100,000 KRW
 ```
 
 `AUTHORIZED`에는 금액을 포함하지 않는다. 금액은 Indexer에서 `SETTLED`를 확인한 뒤 마지막 줄에서만 표시한다.
@@ -573,17 +595,18 @@ type DemoEvent = {
 ### 성공
 
 ```text
-[09:41:43] [SYSTEM] 협상이 성사되었습니다.
-[09:41:45] [SYSTEM] 최종 합의 금액은 100,000 KRW입니다.
-[09:41:51] [SYSTEM] 합의 금액이 온체인에 기록되었습니다.
+[09:41:24] 협상 결과 · 합의 · 100,000 KRW
+[09:41:31] 합의 금액이 온체인에 기록되었습니다.
 ```
 
 ### 결렬
 
 ```text
-[09:41:43] [SYSTEM] 협상이 결렬되었습니다.
-[09:41:45] [SYSTEM] 공개된 금액은 없습니다.
+[09:41:18] AI 에이전트의 비공개 협상이 완료되었습니다.
+[09:41:18] 협상 결과 · 결렬
 ```
+
+결렬 시에는 합의 가격이 없으므로 `VERIFYING`, `PROOFS_COMPLETE`, `AUTHORIZED`, `SETTLED` 단계를 실행하거나 표시하지 않는다.
 
 ## 18. 시각 디자인
 
@@ -593,7 +616,7 @@ type DemoEvent = {
 - 시간은 muted gray, 프로토콜 진행은 절제된 blue, private label은 amber, 성공은 muted green, 오류는 muted red를 텍스트에만 사용한다.
 - 한국어 UI는 Pretendard, 터미널 로그는 시스템 monospace를 사용한다.
 - 그라디언트, glow, glass, KPI 카드, 차트, 전체 체인 탐색기, macOS 신호등 장식을 사용하지 않는다.
-- 반복 모션은 협상 중 터미널 스피너 하나만 허용한다.
+- 반복 모션은 상대 입장·commitment·협상·증명 대기 중 터미널 스피너 하나만 허용한다.
 - `prefers-reduced-motion`에서는 스피너를 정지된 글리프로 표시한다.
 - 데스크톱 발표 화면을 우선하고 1024px 미만에서는 세 패널을 한 열로 쌓는다.
 
@@ -689,9 +712,7 @@ type DemoEvent = {
 
 다음 항목은 제품 요구가 아니라 남은 구현 선택이므로 후속 계획에서 구체화한다.
 
-- 웹 프레임워크와 역할 런타임 transport
 - OpenAI 모델명과 SDK 버전
-- X25519·HKDF·AES-GCM 구현 라이브러리
 - 로컬 모델 어댑터 구현 시점
 - 배포 환경과 CI
 
@@ -699,14 +720,16 @@ type DemoEvent = {
 
 ## 23. 개발 착수 상태
 
-프로세스 격리와 IPC 이벤트 배선까지 확정되었으므로 구현을 막는 설계 결정은 남아 있지 않다. GPT API 키가 아직 없어도 mock 협상 provider와 결정론적 fallback으로 개발과 화면 검증을 먼저 진행할 수 있다.
+프로세스 격리, IPC 이벤트 배선, WebSocket 라우터, 3패널 웹 DApp, GPT mock과 역할별 PolicyGuard 연결까지 구현되었다. GPT API 키가 없어도 암호화된 로컬 결정론적 협상 provider로 성사·결렬 화면을 검증할 수 있다.
 
-v2는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller IPC 뼈대까지 구현되었다. 다음 작업 묶음이 남아 있다.
+현재 구현에는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller, WebSocket, 터미널 입력 UI, 한도를 받지 않는 최대 5개 후보 GPT mock, 역할별 로컬 PolicyGuard, 판정 결과 없는 최대 3회 stateless 재요청, X25519 공유키와 AES-256-GCM 불투명 협상 패킷, 최대 10라운드 협상이 포함된다.
 
-1. WebSocket 명령·이벤트 라우터와 3패널 웹 UI 연결
-2. PolicyGuard, 최대 10라운드 협상 엔진, mock·GPT provider 구현
-3. X25519·HKDF·AES-GCM Room Relay 구현
-4. Uint64 가격을 사용하는 새 Midnight 계약과 Indexer Observer 연결
-5. 성공·결렬·오류 E2E 테스트, 프라이버시 감사, 발표 화면 검증
+다음 작업 묶음이 남아 있다.
 
-구현 순서는 1–2로 로컬 mock 데모를 먼저 완성한 다음 3–4를 연결하고, 마지막에 5로 전체 경계를 검증한다.
+1. 로컬 mock 전체 흐름 녹화 리허설
+2. 필요 시 실제 GPT candidate provider와 `store: false` 요청 어댑터 연결
+3. Uint64 가격을 사용하는 새 Midnight 계약과 Indexer Observer 연결
+4. 실제 Midnight proof·AUTHORIZED·SETTLED 이벤트로 현재 시뮬레이션 어댑터 교체
+5. 오류 E2E 테스트, 프라이버시 감사, 발표 화면 최종 검증
+
+현재 화면 흐름은 실제 역할 프로세스와 암호화된 로컬 협상 이벤트를 사용한다. GPT mock과 실제 GPT provider는 동일한 `CandidateProvider` 경계를 사용하므로, 실제 API 연결 시에도 PolicyGuard와 private state는 역할 런타임 내부에 유지한다.

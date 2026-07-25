@@ -73,25 +73,25 @@ Renders the wordmark and the literal title. Height is approximately 56px with a 
 
 Owns the equal three-column desktop layout and the narrow-screen stack fallback. It contains no business logic.
 
-### ProductCodeInput
+### TerminalInputPrompt
 
-Buyer and Seller each render their own `상품 코드` field only after Demo Controller confirms `RUNTIME_READY` from Buyer, Seller, and Observer. It accepts exactly four digits, with `4821` as the reference value. After submission, the same location becomes the role-specific limit row. Observer has no product-code input.
+Buyer and Seller render product-code and private-limit input only as the last terminal line after Demo Controller confirms `RUNTIME_READY` from all three runtimes. Product code accepts exactly four digits. Enter removes the prompt and typed line; the submitted value is reflected only in the read-only status row above the log. Observer has no input prompt.
 
 ### TerminalPanel
 
 Receives a role label and sanitized live log lines. Buyer and Seller additionally render their current input state above the logs. Observer renders no private input.
 
-### PrivateLimitInput
+### PrivateStatusRow
 
-Buyer uses `구매자 최대 한도`; Seller uses `판매자 최소 금액`. Each field contains the submitted product code, a divider, an editable numeric value, and the `KRW` suffix in one terminal-like row. Entry examples are `110,000` and `95,000`. After the value is stored in role-local private state, the field becomes read-only and shows a lock plus the formatted value, for example `4821 · 구매자 최대 한도 🔒 110,000 KRW`. The amount never appears in logs, the other role runtime, GPT input, Relay plaintext, or Observer. The field has a visible label, a minimum 44px interaction height, and a keyboard-visible `#0000FE` focus outline.
+Buyer uses `구매자 최대 한도`; Seller uses `판매자 최소 금액`. Before entry, the fixed row shows an empty amount slot. After the value is stored in role-local private state, it shows a lock plus the formatted value, for example `4821 · 구매자 최대 한도 🔒 110,000 KRW`. The amount never appears in ordinary logs, the other role runtime, GPT input, Relay plaintext, or Observer.
 
 ### TerminalLine
 
-Uses the single format `[HH:mm:ss] [SYSTEM] 메시지`. It aligns timestamp, source tag, and message. Line segments use only the documented metadata, protocol, success, private, primary, and error roles. Panel backgrounds do not change by role or state.
+Uses the single format `[HH:mm:ss] 메시지`. Because every visible line is a sanitized system event, `[SYSTEM]`, `[BUYER]`, and `[SELLER]` tags are omitted. Time is gray, ordinary prose is white, private input labels are gold, and only visible protocol identifiers such as `commitment`, `OPEN`, and `AUTHORIZED` are lavender. Internal contract actions such as `createDeal` and `joinDeal` never enter the browser display stream. The only full sage-green line is Observer `SETTLED · 최종 금액`.
 
 ### NegotiatingStatus
 
-Buyer and Seller each show one final status line while their agents are negotiating. The line contains the literal text `AI 에이전트가 비공개로 협상하고 있습니다.` and a small terminal spinner. It intentionally contains no proposal amount, counteroffer, agent message, reasoning trace, or intermediate decision.
+After both commitments are ready, Buyer and Seller receive `협상을 시작합니다.` at the same timestamp with a small terminal spinner. Approximately 0.8 seconds later, the same replacement row becomes `AI 에이전트가 비공개로 협상하고 있습니다.` with the spinner still active. It intentionally contains no proposal amount, counteroffer, agent message, reasoning trace, or intermediate decision.
 
 The spinner is the only recurring motion. It runs only while the state is negotiating, stops on completion or error, and becomes a static glyph under `prefers-reduced-motion`.
 
@@ -99,27 +99,27 @@ The spinner is the only recurring motion. It runs only while the state is negoti
 
 1. 페이지 로드 시 세 패널의 빈 터미널 외곽만 표시
 2. DApp 실행 후 Buyer·Seller·Observer 프로세스의 `RUNTIME_READY` 확인
-3. Buyer와 Seller 상품 코드 입력, Observer 공개 상태 대기 행 표시
+3. Buyer와 Seller 터미널 마지막 줄에 상품 코드 입력 프롬프트 표시
 4. Buyer와 Seller가 각자 동일한 네 자리 상품 코드 입력
 5. Buyer 최대 한도와 Seller 최소 금액 입력
 6. 각 조건을 역할별 로컬 비공개 상태에 저장하고 자기 패널에서 잠긴 값으로 표시
-7. 먼저 입력한 역할에 `상대방의 입력을 기다리고 있습니다.` 표시
-8. 양쪽 입력 완료 후 Buyer·Seller에 공동 완료 이벤트 표시
-9. 구매자 commitment 생성 및 `createDeal`
-10. 판매자 commitment 생성 및 `joinDeal`
-11. GPT 기반 에이전트의 비공개 협상
-12. 구매자 증명: 합의 금액이 최대 한도 이하임을 값 공개 없이 증명
-13. 판매자 증명: 합의 금액이 최소 금액 이상임을 값 공개 없이 증명
+7. 먼저 입장한 역할에는 상대 입장 대기를, 먼저 조건을 입력한 역할에는 상대 commitment 대기를 표시
+8. 상대 입장·commitment 완료 이벤트는 기존 대기 행을 교체
+9. 구매자·판매자 commitment 생성. 내부 `createDeal`·`joinDeal` 이벤트는 화면 스트림에서 제외
+10. 양쪽에 같은 시각으로 `협상을 시작합니다. ⠋` 표시
+11. 약 0.8초 뒤 같은 행을 `AI 에이전트가 비공개로 협상하고 있습니다. ⠋`로 교체
+12. Buyer·Seller에 같은 시각으로 `모든 조건을 공개하지 않고 증명하고 있습니다.` 표시
+13. 양쪽 조건 검사가 끝나면 같은 시각으로 증명 완료 표시
 14. 성공 시 합의 금액 공개 및 온체인 기록
 15. 실패 시 금액을 공개하지 않고 협상 결렬만 기록
 
-## Preview Content
+## Runtime Content
 
-The interactive mock may keep deterministic sample events temporarily for layout review. Production mode must not schedule logs from page load or timers. Once IPC wiring is connected, every displayed log comes from a validated runtime `DemoEvent`; mock events remain available only behind an explicit development flag.
+The browser does not schedule presentation logs from page load or timers. Every displayed log comes from a validated runtime `DemoEvent` over the local WebSocket. Waiting lines use a stable replacement key so completion stops the spinner and replaces the waiting state.
 
-Buyer sample lines cover wallet readiness, private-state loading, deal creation, and the non-disclosing negotiation status.
+Buyer sample lines cover room entry, private-condition storage, commitment readiness, and the non-disclosing negotiation status.
 
-Seller sample lines cover wallet readiness, contract attachment, joining, and the non-disclosing negotiation status.
+Seller sample lines cover room entry, private-condition storage, commitment readiness, and the non-disclosing negotiation status.
 
 Observer sample lines are state-dependent. During negotiation it shows public deal creation, seller participation, and current state `OPEN`. After Buyer authorization it appends `AUTHORIZED · 가격 커밋 등록(금액 비공개)`, with no amount. Only after successful settlement does it append `SETTLED · 100,000 KRW`. On failure it appends only `협상이 결렬되었습니다.` with no amount. It must not resemble a full-chain transaction feed.
 
@@ -127,7 +127,7 @@ No view displays the AI agents' conversation, reasoning, proposals, counteroffer
 
 Runtime events carry an explicit audience. `ROLE_LOCAL` lines such as private-condition storage and peer-input waiting use the private text role. `PARTICIPANTS` lines shared by Buyer and Seller use the protocol text role. `PUBLIC` lines belong to Observer and use the public-state tone. Color is supplementary; the literal message must still identify the state.
 
-All prose UI and log messages are Korean. English remains only where it is a real role name or protocol identifier, including `Buyer`, `Seller`, `Observer`, `SYSTEM`, `commitment`, `createDeal`, `joinDeal`, `OPEN`, `AUTHORIZED`, and `SETTLED`.
+All prose UI and log messages are Korean. English remains only where it is a real role name or visible protocol identifier, including `Buyer`, `Seller`, `Observer`, `commitment`, `OPEN`, `AUTHORIZED`, and `SETTLED`.
 
 ## Data Flow
 
