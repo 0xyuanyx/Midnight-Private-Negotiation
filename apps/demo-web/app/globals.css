@@ -200,7 +200,7 @@ button {
 }
 
 .status-error {
-  background: var(--mute);
+  background: var(--danger);
 }
 
 .panel-status {
@@ -349,6 +349,14 @@ button {
 
 .token-protocol {
   color: var(--protocol);
+}
+
+.token-success {
+  color: var(--success);
+}
+
+.token-danger {
+  color: var(--danger);
 }
 
 .terminal-spinner {

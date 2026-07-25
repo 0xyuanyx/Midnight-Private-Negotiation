@@ -36,9 +36,17 @@
 └── docs/               # 새 DApp 설계 문서
 ```
 
-공용 프로토콜, 별도 역할 프로세스, WebSocket Controller와 3패널 웹 DApp이 구현되어 있습니다. 브라우저는 로그를 자체 생성하지 않고 검증된 런타임 이벤트만 표시합니다. GPT mock은 공개 기준가·현재 제안·라운드만으로 최대 다섯 후보를 생성하고, 각 역할의 로컬 `PolicyGuard`가 자기 한도로 전송·수락 가능 여부를 검사합니다. 실패 후보와 stateless 재요청은 화면·IPC·Relay에 노출되지 않습니다. Room Relay는 Controller와 분리된 네 번째 프로세스로 실행되며 Buyer·Seller가 로컬 TCP로 직접 연결합니다. 역할 간 협상 패킷은 임시 X25519 공유 비밀에서 HKDF-SHA-256 세션 키를 만들고, 방·역할·순번을 AAD로 묶은 AES-256-GCM 암호문만 Relay에 전달합니다.
+공용 프로토콜, 별도 역할 프로세스, WebSocket Controller와 3패널 웹 DApp이 구현되어 있습니다. 브라우저는 로그를 자체 생성하지 않고 검증된 런타임 이벤트만 표시합니다. GPT mock은 공개 기준가·현재 제안·라운드만으로 최대 다섯 후보를 생성하고, 각 역할의 로컬 `PolicyGuard`가 자기 한도로 전송·수락 가능 여부를 검사합니다. 외부 AI가 없거나 모든 후보가 정책을 통과하지 못하면 역할 런타임 내부의 결정론적 fallback이 제안·수락을 이어받습니다. fallback이 사용하는 한도는 GPT 입력, Controller, 로그로 전달되지 않습니다. 실패 후보와 stateless 재요청도 화면·IPC·Relay에 노출되지 않습니다. Room Relay는 Controller와 분리된 네 번째 프로세스로 실행되며 Buyer·Seller가 로컬 TCP로 직접 연결합니다. 역할 간 협상 패킷은 임시 X25519 공유 비밀에서 HKDF-SHA-256 세션 키를 만들고, 방·역할·순번을 AAD로 묶은 AES-256-GCM 암호문만 Relay에 전달합니다.
 
 Midnight 로컬 체인 모드에서는 Buyer가 계약을 배포하고, Seller가 `joinDeal`, Buyer가 `authorizeHiddenPrice`, Seller가 `settle`을 각각 자기 프로세스와 전용 proof server에서 실행합니다. Controller의 타이머가 공개 상태를 만들지 않으며, 지갑이 보고한 트랜잭션 완료 뒤에도 Observer가 Indexer에서 `OPEN → AUTHORIZED → SETTLED`를 확인해야 웹에 표시됩니다. Buyer·Seller 한도는 계약의 witness로만 사용되고 공개 ledger에는 commitment만 남으며, `finalPrice`는 `SETTLED`에서만 공개됩니다. 새 코드에서는 `counter` 레거시 명칭을 사용하지 않습니다.
+
+한 역할이 늦게 입장했을 때 상대 commitment가 이미 준비되어 있으면 금액 없이 `상대방 commitment가 등록되었습니다.`를 먼저 동기화하고 불필요한 대기 로그를 만들지 않습니다. 화면에는 같은 4자리 상품 코드를 유지하지만 내부 session ID는 브라우저 데모 인스턴스별로 분리하므로, 페이지를 새로 열어 같은 코드를 사용해도 이전 실행 상태와 섞이지 않습니다.
+
+## GPT 역할과 비공개 경계
+
+Buyer와 Seller는 서로 다른 상세 역할 지침을 사용합니다. Buyer는 공개된 Seller 제안에서 수락 후보와 점진적으로 낮은 counter offer 후보를 만들고, Seller는 공개된 Buyer 제안에서 수락 후보와 점진적으로 높은 counter offer 후보를 만듭니다. 양쪽 모두 한 후보만 고집하지 않고 최대 다섯 후보를 만들어 불필요한 조기 결렬 가능성을 낮춥니다.
+
+GPT 요청에는 `role`, `productCode`, `round`, `currentOffer`만 들어갑니다. 한도, commitment 난수, 비밀키, 지갑 정보, PolicyGuard 판정, 폐기 후보와 재시도 횟수는 포함하지 않습니다. GPT는 `최종 제안`, `마지노선`, `더는 양보할 수 없음`처럼 비공개 경계를 암시하는 표현도 생성하지 않으며, 후보가 거절되면 같은 공개 입력으로 완전히 새로운 stateless 요청을 수행합니다. Responses API 연결 시 사용할 요청 객체는 `store: false`를 고정하지만, 이 설정은 조직 단위 Zero Data Retention과 동일한 보장은 아닙니다. 현재 외부 API 어댑터는 자동 활성화하지 않으며, 키가 있더라도 별도 활성화 전에는 API 호출과 비용이 발생하지 않습니다.
 
 ## 로컬 DApp 실행
 
@@ -98,7 +106,7 @@ npm run typecheck
 npm test
 ```
 
-테스트는 Buyer·Seller·Observer와 Room Relay의 프로세스 격리, 상품 코드 입장, commitment 대기와 공동 타임스탬프, GPT mock 입력의 비밀 필드 거부, 역할별 PolicyGuard, stateless 재요청, 최대 10라운드 성사·결렬 분기, 결렬 시 증명 생략, 한도 원문 비노출, Controller의 암호문 비수신, Relay envelope의 평문 필드 거부, 메타데이터·인증 태그 변조, sequence replay, nonce 재사용, 다른 방 패킷 차단, Observer 공개 이벤트 제한을 확인합니다.
+테스트는 Buyer·Seller·Observer와 Room Relay의 프로세스 격리, 상품 코드 입장, commitment 대기와 공동 타임스탬프, GPT mock 입력의 비밀 필드 거부, 역할별 PolicyGuard, stateless 재요청, 외부 AI 키 없는 고액 조건 fallback, 최대 10라운드 성사·결렬 분기, 결렬 시 증명 생략, 한도 원문 비노출, Controller의 암호문 비수신, Relay envelope의 평문 필드 거부, 메타데이터·인증 태그 변조, sequence replay, nonce 재사용, 다른 방 패킷 차단, Observer 공개 이벤트 제한을 확인합니다.
 
 웹 DApp 검증:
 

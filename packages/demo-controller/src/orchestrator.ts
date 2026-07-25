@@ -104,12 +104,15 @@ export class IsolatedRuntimeController {
   readonly #partyRooms = new Map<PartyRole, PartyRoom>();
   readonly #relayChannelSessions = new Map<PartyRole, string>();
   readonly #commitmentSessions = new Map<PartyRole, string>();
+  readonly #peerCommitmentNotices = new Set<string>();
   readonly #peerReadySessions = new Set<string>();
   readonly #observerSessions = new Set<string>();
   readonly #chainOpenSessions = new Set<string>();
   readonly #chainAuthorizedSessions = new Set<string>();
   readonly #chainWalletAddresses = new Map<PartyRole, string>();
   readonly #pendingSettlements = new Map<string, string>();
+  readonly #negotiationAnnouncedSessions = new Set<string>();
+  readonly #negotiationDisplayReadySessions = new Set<string>();
   readonly #negotiatingSessions = new Set<string>();
   readonly #finishedSessions = new Set<string>();
   readonly #events = new EventEmitter();
@@ -208,10 +211,13 @@ export class IsolatedRuntimeController {
                       "demo event panel does not match its child process",
                     );
                   }
-                  this.#emit(message.event);
                   if (role === "observer") {
+                    this.#emit(message.event);
                     this.#acceptObserverEvent(message.event);
                   } else {
+                    if (this.#shouldDisplayPartyEvent(role, message.event)) {
+                      this.#emit(message.event);
+                    }
                     this.#acceptPartyEvent(role, message.event);
                   }
                   return;
@@ -401,12 +407,15 @@ export class IsolatedRuntimeController {
     this.#partyRooms.clear();
     this.#relayChannelSessions.clear();
     this.#commitmentSessions.clear();
+    this.#peerCommitmentNotices.clear();
     this.#peerReadySessions.clear();
     this.#observerSessions.clear();
     this.#chainOpenSessions.clear();
     this.#chainAuthorizedSessions.clear();
     this.#chainWalletAddresses.clear();
     this.#pendingSettlements.clear();
+    this.#negotiationAnnouncedSessions.clear();
+    this.#negotiationDisplayReadySessions.clear();
     this.#negotiatingSessions.clear();
     this.#finishedSessions.clear();
     this.#relayIdentity = undefined;
@@ -487,6 +496,17 @@ export class IsolatedRuntimeController {
     }
   }
 
+  #shouldDisplayPartyEvent(role: PartyRole, event: DemoEvent): boolean {
+    const waitingForKnownPeerCommitment =
+      event.state === "WAITING_PEER" &&
+      ((role === "buyer" &&
+        event.messageCode === "WAITING_SELLER_COMMITMENT") ||
+        (role === "seller" &&
+          event.messageCode === "WAITING_BUYER_COMMITMENT")) &&
+      this.#peerCommitmentNotices.has(`${role}:${event.sessionId}`);
+    return !waitingForKnownPeerCommitment;
+  }
+
   #acceptChainTransaction(message: {
     role: PartyRole;
     sessionId: string;
@@ -523,6 +543,7 @@ export class IsolatedRuntimeController {
     if (event.state === "AUTHORIZED") {
       this.#chainAuthorizedSessions.add(event.sessionId);
       this.#emitProofsComplete(event.sessionId, event.occurredAt);
+      this.#emitSettlementFinalizing(event.sessionId, event.occurredAt);
       return;
     }
     if (event.state === "CANCELLED") {
@@ -532,6 +553,10 @@ export class IsolatedRuntimeController {
         buyerMessageCode: "NEGOTIATION_CANCELLED",
         sellerMessageCode: "NEGOTIATION_CANCELLED",
         occurredAt: event.occurredAt,
+        replaceKeys: {
+          buyer: "buyer-cancellation",
+          seller: "seller-cancellation",
+        },
       });
       return;
     }
@@ -543,6 +568,7 @@ export class IsolatedRuntimeController {
       if (!this.#chainAuthorizedSessions.has(event.sessionId)) {
         this.#chainAuthorizedSessions.add(event.sessionId);
         this.#emitProofsComplete(event.sessionId, event.occurredAt);
+        this.#emitSettlementFinalizing(event.sessionId, event.occurredAt);
       }
       this.#emitParticipantPair({
         sessionId: event.sessionId,
@@ -551,6 +577,10 @@ export class IsolatedRuntimeController {
         sellerMessageCode: "NEGOTIATION_SETTLED",
         occurredAt: event.occurredAt,
         agreedAmount,
+        replaceKeys: {
+          buyer: "buyer-settlement",
+          seller: "seller-settlement",
+        },
       });
       this.#emitParticipantPair({
         sessionId: event.sessionId,
@@ -573,6 +603,20 @@ export class IsolatedRuntimeController {
       replaceKeys: {
         buyer: "buyer-proof",
         seller: "seller-proof",
+      },
+    });
+  }
+
+  #emitSettlementFinalizing(sessionId: string, occurredAt: string): void {
+    this.#emitParticipantPair({
+      sessionId,
+      state: "FINALIZING",
+      buyerMessageCode: "FINALIZING_SETTLEMENT",
+      sellerMessageCode: "FINALIZING_SETTLEMENT",
+      occurredAt,
+      replaceKeys: {
+        buyer: "buyer-settlement",
+        seller: "seller-settlement",
       },
     });
   }
@@ -600,6 +644,8 @@ export class IsolatedRuntimeController {
         seller: "seller-peer-entry",
       },
     });
+    this.#emitPeerCommitmentNotice("buyer", sessionId);
+    this.#emitPeerCommitmentNotice("seller", sessionId);
 
     if (!this.#observerSessions.has(sessionId)) {
       this.configureObserver({
@@ -629,16 +675,21 @@ export class IsolatedRuntimeController {
       });
     }
 
-    this.#emitParticipantPair({
+    const occurredAt = new Date().toISOString();
+    const correlationId = createRequestId();
+    this.#emitPeerCommitmentNotice(
+      "buyer",
       sessionId,
-      state: "PEER_COMMITMENT_REGISTERED",
-      buyerMessageCode: "SELLER_COMMITMENT_REGISTERED",
-      sellerMessageCode: "BUYER_COMMITMENT_REGISTERED",
-      replaceKeys: {
-        buyer: "buyer-peer-commitment",
-        seller: "seller-peer-commitment",
-      },
-    });
+      occurredAt,
+      correlationId,
+    );
+    this.#emitPeerCommitmentNotice(
+      "seller",
+      sessionId,
+      occurredAt,
+      correlationId,
+    );
+    this.#announceNegotiation(sessionId);
     if (!chainMode) {
       this.#publishPublicState(
         sessionId,
@@ -646,13 +697,80 @@ export class IsolatedRuntimeController {
         "OBSERVER_OPEN",
         new Date().toISOString(),
       );
-      this.#schedule(160, () => this.#tryStartNegotiation(sessionId));
     }
+  }
+
+  #emitPeerCommitmentNotice(
+    role: PartyRole,
+    sessionId: string,
+    occurredAt = new Date().toISOString(),
+    correlationId = createRequestId(),
+  ): void {
+    const peer = role === "buyer" ? "seller" : "buyer";
+    const noticeKey = `${role}:${sessionId}`;
+    if (
+      this.#commitmentSessions.get(peer) !== sessionId ||
+      this.#peerCommitmentNotices.has(noticeKey)
+    ) {
+      return;
+    }
+    this.#peerCommitmentNotices.add(noticeKey);
+    this.#emit(
+      createDemoEvent({
+        panel: role,
+        sessionId,
+        state: "PEER_COMMITMENT_REGISTERED",
+        messageCode:
+          role === "buyer"
+            ? "SELLER_COMMITMENT_REGISTERED"
+            : "BUYER_COMMITMENT_REGISTERED",
+        audience: "PARTICIPANTS",
+        occurredAt,
+        correlationId,
+        replaceKey: `${role}-peer-commitment`,
+      }),
+    );
+  }
+
+  #announceNegotiation(sessionId: string): void {
+    if (
+      this.#negotiationAnnouncedSessions.has(sessionId) ||
+      this.#finishedSessions.has(sessionId)
+    ) {
+      return;
+    }
+    this.#negotiationAnnouncedSessions.add(sessionId);
+    this.#emitParticipantPair({
+      sessionId,
+      state: "NEGOTIATING",
+      buyerMessageCode: "NEGOTIATION_START",
+      sellerMessageCode: "NEGOTIATION_START",
+      replaceKeys: {
+        buyer: "buyer-negotiation",
+        seller: "seller-negotiation",
+      },
+    });
+    this.#schedule(800, () => {
+      if (this.#finishedSessions.has(sessionId)) return;
+      this.#emitParticipantPair({
+        sessionId,
+        state: "NEGOTIATING",
+        buyerMessageCode: "NEGOTIATING",
+        sellerMessageCode: "NEGOTIATING",
+        replaceKeys: {
+          buyer: "buyer-negotiation",
+          seller: "seller-negotiation",
+        },
+      });
+      this.#negotiationDisplayReadySessions.add(sessionId);
+      this.#tryStartNegotiation(sessionId);
+    });
   }
 
   #tryStartNegotiation(sessionId: string): void {
     if (
       !this.#peerReadySessions.has(sessionId) ||
+      !this.#negotiationDisplayReadySessions.has(sessionId) ||
       (chainMode && !this.#chainOpenSessions.has(sessionId)) ||
       this.#relayChannelSessions.get("buyer") !== sessionId ||
       this.#relayChannelSessions.get("seller") !== sessionId ||
@@ -663,40 +781,14 @@ export class IsolatedRuntimeController {
     }
 
     this.#negotiatingSessions.add(sessionId);
-    const occurredAt = new Date().toISOString();
-    this.#emitParticipantPair({
-      sessionId,
-      state: "NEGOTIATING",
-      buyerMessageCode: "NEGOTIATION_START",
-      sellerMessageCode: "NEGOTIATION_START",
-      occurredAt,
-      replaceKeys: {
-        buyer: "buyer-negotiation",
-        seller: "seller-negotiation",
-      },
-    });
-    this.#schedule(800, () => {
-      const negotiationOccurredAt = new Date().toISOString();
-      this.#emitParticipantPair({
-        sessionId,
-        state: "NEGOTIATING",
-        buyerMessageCode: "NEGOTIATING",
-        sellerMessageCode: "NEGOTIATING",
-        occurredAt: negotiationOccurredAt,
-        replaceKeys: {
-          buyer: "buyer-negotiation",
-          seller: "seller-negotiation",
-        },
+    for (const target of ["buyer", "seller"] as const) {
+      this.#send({
+        protocolVersion: PROTOCOL_VERSION,
+        type: "START_RUNTIME",
+        requestId: createRequestId(),
+        target,
       });
-      for (const target of ["buyer", "seller"] as const) {
-        this.#send({
-          protocolVersion: PROTOCOL_VERSION,
-          type: "START_RUNTIME",
-          requestId: createRequestId(),
-          target,
-        });
-      }
-    });
+    }
   }
 
   #acceptOutcome(
@@ -728,7 +820,19 @@ export class IsolatedRuntimeController {
     });
 
     if (message.result === "CANCELLED") {
-      if (chainMode) return;
+      if (chainMode) {
+        this.#emitParticipantPair({
+          sessionId: message.sessionId,
+          state: "FINALIZING",
+          buyerMessageCode: "FINALIZING_CANCELLATION",
+          sellerMessageCode: "FINALIZING_CANCELLATION",
+          replaceKeys: {
+            buyer: "buyer-cancellation",
+            seller: "seller-cancellation",
+          },
+        });
+        return;
+      }
       this.#schedule(140, () => {
         const occurredAt = new Date().toISOString();
         this.#emitParticipantPair({

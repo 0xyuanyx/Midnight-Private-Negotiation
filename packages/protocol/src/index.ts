@@ -18,6 +18,7 @@ export const demoStates = [
   "NEGOTIATING",
   "NEGOTIATION_COMPLETE",
   "VERIFYING",
+  "FINALIZING",
   "PROOFS_COMPLETE",
   "AGREED",
   "AUTHORIZED",

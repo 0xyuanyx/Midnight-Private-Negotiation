@@ -1,7 +1,11 @@
 import { WebSocket, WebSocketServer } from "ws";
-import type { PartyRole } from "@midnight-negotiation/protocol";
+import {
+  createRequestId,
+  type PartyRole,
+} from "@midnight-negotiation/protocol";
 import { isBrowserDisplayEvent } from "./display-policy.js";
 import { IsolatedRuntimeController } from "./orchestrator.js";
+import { createRoomSessionId } from "./session-id.js";
 
 type ClientCommand =
   | {
@@ -142,6 +146,7 @@ const webSocketServer = new WebSocketServer({
 });
 
 webSocketServer.on("connection", (socket) => {
+  const demoInstanceId = createRequestId();
   sockets.add(socket);
   send(socket, { type: "READY" });
 
@@ -155,7 +160,10 @@ webSocketServer.on("connection", (socket) => {
       }
 
       if (command.type === "JOIN_ROOM") {
-        const sessionId = `room-${command.productCode}`;
+        const sessionId = createRoomSessionId(
+          command.productCode,
+          demoInstanceId,
+        );
         roleSessions.set(command.role, sessionId);
         controller.joinRoom(command.role, {
           sessionId,

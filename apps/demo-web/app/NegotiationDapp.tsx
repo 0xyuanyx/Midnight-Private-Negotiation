@@ -65,10 +65,14 @@ const messages: Partial<Record<MessageCode, (event: DemoEvent) => string>> = {
     "구매자 commitment가 등록되었습니다.",
   OBSERVER_OPEN: () => "OPEN",
   NEGOTIATION_START: () => "협상을 시작합니다.",
-  NEGOTIATING: () => "AI 에이전트가 비공개로 협상하고 있습니다.",
+  NEGOTIATING: () => "AI 에이전트가 비공개 협상을 진행하고 있습니다.",
   NEGOTIATION_COMPLETE: () =>
     "AI 에이전트의 비공개 협상이 완료되었습니다.",
   VERIFYING: () => "모든 조건을 공개하지 않고 증명하고 있습니다.",
+  FINALIZING_SETTLEMENT: () =>
+    "합의 금액을 온체인에 기록하고 있습니다.",
+  FINALIZING_CANCELLATION: () =>
+    "협상 결과를 온체인에 반영하고 있습니다.",
   PROOFS_COMPLETE: () => "모든 조건 증명이 완료되었습니다.",
   NEGOTIATION_SETTLED: (event) =>
     `협상 결과 · 합의 · ${Number(event.agreedAmount ?? 0).toLocaleString("ko-KR")} KRW`,
@@ -93,6 +97,8 @@ const spinningMessages = new Set<MessageCode>([
   "NEGOTIATION_START",
   "NEGOTIATING",
   "VERIFYING",
+  "FINALIZING_SETTLEMENT",
+  "FINALIZING_CANCELLATION",
 ]);
 
 const timeLabel = (occurredAt: string): string =>
@@ -110,31 +116,54 @@ const formatAmount = (digits: string): string => {
 };
 
 const eventKey = (event: DemoEvent): string =>
-  `${event.panel}:${event.replaceKey ?? event.eventId}`;
+  `${event.panel}:${event.eventId}`;
 
 function SpinnerGlyph() {
   return <span className="terminal-spinner" aria-hidden="true" />;
 }
 
-function ProtocolMessage({ text }: { text: string }) {
-  const parts = text.split(/(commitment|OPEN|AUTHORIZED)/g);
+function SemanticMessage({ text }: { text: string }) {
+  const parts = text.split(
+    /(commitment|OPEN|AUTHORIZED|SETTLED|CANCELLED|결렬|합의 · [\d,]+ KRW)/g,
+  );
 
   return (
     <>
-      {parts.map((part, index) =>
-        /^(commitment|OPEN|AUTHORIZED)$/.test(part) ? (
-          <span className="token-protocol" key={`${part}-${index}`}>
-            {part}
-          </span>
-        ) : (
-          part
-        ),
-      )}
+      {parts.map((part, index) => {
+        if (/^(commitment|OPEN|AUTHORIZED)$/.test(part)) {
+          return (
+            <span className="token-protocol" key={`${part}-${index}`}>
+              {part}
+            </span>
+          );
+        }
+        if (/^(SETTLED|합의 · [\d,]+ KRW)$/.test(part)) {
+          return (
+            <span className="token-success" key={`${part}-${index}`}>
+              {part}
+            </span>
+          );
+        }
+        if (/^(CANCELLED|결렬)$/.test(part)) {
+          return (
+            <span className="token-danger" key={`${part}-${index}`}>
+              {part}
+            </span>
+          );
+        }
+        return part;
+      })}
     </>
   );
 }
 
-function LogLine({ event }: { event: DemoEvent }) {
+function LogLine({
+  event,
+  isActive,
+}: {
+  event: DemoEvent;
+  isActive: boolean;
+}) {
   const reducedMotion = useReducedMotion();
   const message = messages[event.messageCode]?.(event) ?? "";
   const isFinalPublicState =
@@ -157,9 +186,11 @@ function LogLine({ event }: { event: DemoEvent }) {
         {isFinalPublicState ? (
           message
         ) : (
-          <ProtocolMessage text={message} />
+          <SemanticMessage text={message} />
         )}
-        {spinningMessages.has(event.messageCode) ? <SpinnerGlyph /> : null}
+        {spinningMessages.has(event.messageCode) && isActive ? (
+          <SpinnerGlyph />
+        ) : null}
       </span>
     </motion.li>
   );
@@ -347,6 +378,15 @@ function TerminalPanel({
 }) {
   const logRef = useRef<HTMLDivElement>(null);
   const lastState = events.at(-1)?.state;
+  const latestEventByReplaceKey = useMemo(() => {
+    const latest = new Map<string, string>();
+    for (const event of events) {
+      if (event.replaceKey !== undefined) {
+        latest.set(event.replaceKey, event.eventId);
+      }
+    }
+    return latest;
+  }, [events]);
 
   useEffect(() => {
     const element = logRef.current;
@@ -386,7 +426,15 @@ function TerminalPanel({
           <AnimatePresence initial={false}>
             {events.map((event) =>
               messages[event.messageCode] === undefined ? null : (
-                <LogLine event={event} key={eventKey(event)} />
+                <LogLine
+                  event={event}
+                  isActive={
+                    event.replaceKey === undefined ||
+                    latestEventByReplaceKey.get(event.replaceKey) ===
+                      event.eventId
+                  }
+                  key={eventKey(event)}
+                />
               ),
             )}
             {prompt}
@@ -421,13 +469,8 @@ export function NegotiationDapp({ initialNow }: { initialNow: string }) {
   const upsertEvent = useCallback((event: DemoEvent) => {
     setEvents((current) => {
       const key = eventKey(event);
-      const index = current.findIndex((item) => eventKey(item) === key);
-      if (index === -1) return [...current, event];
-      return [
-        ...current.slice(0, index),
-        ...current.slice(index + 1),
-        event,
-      ];
+      if (current.some((item) => eventKey(item) === key)) return current;
+      return [...current, event];
     });
   }, []);
 
@@ -502,7 +545,7 @@ export function NegotiationDapp({ initialNow }: { initialNow: string }) {
     const url =
       process.env.NEXT_PUBLIC_DEMO_WS_URL ?? "ws://127.0.0.1:8787";
     let disposed = false;
-    let retryTimer: ReturnType<typeof window.setTimeout> | undefined;
+    let retryTimer: number | undefined;
 
     const connect = () => {
       if (disposed) return;

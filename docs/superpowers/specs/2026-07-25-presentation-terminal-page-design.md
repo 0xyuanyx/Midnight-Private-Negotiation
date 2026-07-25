@@ -91,7 +91,7 @@ Uses the single format `[HH:mm:ss] 메시지`. Because every visible line is a s
 
 ### NegotiatingStatus
 
-After both commitments are ready, Buyer and Seller receive `협상을 시작합니다.` at the same timestamp with a small terminal spinner. Approximately 0.8 seconds later, the same replacement row becomes `AI 에이전트가 비공개로 협상하고 있습니다.` with the spinner still active. It intentionally contains no proposal amount, counteroffer, agent message, reasoning trace, or intermediate decision.
+After both commitments are ready, Buyer and Seller receive `협상을 시작합니다.` at the same timestamp with a small terminal spinner. Approximately 0.8 seconds later, `AI 에이전트가 비공개 협상을 진행하고 있습니다.` is appended as a new row with the spinner still active. The start row remains in place and its spinner stops. The status intentionally contains no proposal amount, counteroffer, agent message, reasoning trace, or intermediate decision.
 
 The spinner is the only recurring motion. It runs only while the state is negotiating, stops on completion or error, and becomes a static glyph under `prefers-reduced-motion`.
 
@@ -104,18 +104,19 @@ The spinner is the only recurring motion. It runs only while the state is negoti
 5. Buyer 최대 한도와 Seller 최소 금액 입력
 6. 각 조건을 역할별 로컬 비공개 상태에 저장하고 자기 패널에서 잠긴 값으로 표시
 7. 먼저 입장한 역할에는 상대 입장 대기를, 먼저 조건을 입력한 역할에는 상대 commitment 대기를 표시
-8. 상대 입장·commitment 완료 이벤트는 기존 대기 행을 교체
+8. 상대 입장·commitment 완료 이벤트는 새 행으로 추가하고 기존 대기 행의 스피너만 정지
 9. 구매자·판매자 commitment 생성. 내부 `createDeal`·`joinDeal` 이벤트는 화면 스트림에서 제외
 10. 양쪽에 같은 시각으로 `협상을 시작합니다. ⠋` 표시
-11. 약 0.8초 뒤 같은 행을 `AI 에이전트가 비공개로 협상하고 있습니다. ⠋`로 교체
+11. 약 0.8초 뒤 다음 행에 `AI 에이전트가 비공개 협상을 진행하고 있습니다. ⠋` 추가
 12. Buyer·Seller에 같은 시각으로 `모든 조건을 공개하지 않고 증명하고 있습니다.` 표시
 13. 양쪽 조건 검사가 끝나면 같은 시각으로 증명 완료 표시
-14. 성공 시 합의 금액 공개 및 온체인 기록
-15. 실패 시 금액을 공개하지 않고 협상 결렬만 기록
+14. 성공 시 `합의 금액을 온체인에 기록하고 있습니다. ⠋`를 표시하고 `SETTLED`를 기다림
+15. `SETTLED` 확인 뒤 합의 금액 공개 및 온체인 기록 완료 표시
+16. 실패 시 금액을 공개하지 않고 협상 결렬만 기록
 
 ## Runtime Content
 
-The browser does not schedule presentation logs from page load or timers. Every displayed log comes from a validated runtime `DemoEvent` over the local WebSocket. Waiting lines use a stable replacement key so completion stops the spinner and replaces the waiting state.
+The browser does not schedule presentation logs from page load or timers. Every displayed log comes from a validated runtime `DemoEvent` over the local WebSocket. Waiting lines use a stable lifecycle key so completion stops only the spinner; every existing log row remains immutable and the next state is appended.
 
 Buyer sample lines cover room entry, private-condition storage, commitment readiness, and the non-disclosing negotiation status.
 
@@ -146,7 +147,7 @@ Formatting errors remain attached to the relevant input. Runtime, Relay, GPT, pr
 - Provide a keyboard-visible focus style for inputs.
 - Do not rely on color alone to communicate state; each line retains a literal text label.
 - Do not add unlabeled icon buttons or decorative controls.
-- The spinner has the adjacent literal status `AI 에이전트가 비공개로 협상하고 있습니다.`, so motion is not the sole state signal.
+- The spinner has the adjacent literal status `AI 에이전트가 비공개 협상을 진행하고 있습니다.`, so motion is not the sole state signal.
 - Under reduced motion, the spinner remains static without hiding the status.
 
 ## Verification

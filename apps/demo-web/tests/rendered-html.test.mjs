@@ -53,16 +53,23 @@ test("connects the DApp event stream without browser-generated mock logs", async
 
   assert.match(types, /type ServerMessage/);
   assert.match(dappSource, /new WebSocket/);
-  assert.match(dappSource, /AI 에이전트가 비공개로 협상하고 있습니다/);
+  assert.match(dappSource, /AI 에이전트가 비공개 협상을 진행하고 있습니다/);
   assert.match(dappSource, /모든 조건을 공개하지 않고 증명하고 있습니다/);
+  assert.match(dappSource, /합의 금액을 온체인에 기록하고 있습니다/);
   assert.match(dappSource, /판매자 commitment 등록을 기다리고 있습니다/);
   assert.match(dappSource, /구매자 commitment 등록을 기다리고 있습니다/);
   assert.match(dappSource, /NEGOTIATION_START/);
   assert.match(dappSource, /협상을 시작합니다/);
+  assert.match(dappSource, /협상 결과를 온체인에 반영하고 있습니다/);
   assert.match(
     dappSource,
     /const spinningMessages[\s\S]*"NEGOTIATION_START"[\s\S]*"NEGOTIATING"/,
   );
+  assert.match(dappSource, /`\$\{event\.panel\}:\$\{event\.eventId\}`/);
+  assert.match(dappSource, /latestEventByReplaceKey/);
+  assert.doesNotMatch(dappSource, /current\.slice\(0, index\)/);
+  assert.match(dappSource, /token-danger/);
+  assert.match(globalCss, /\.token-danger[\s\S]*var\(--danger\)/);
   assert.doesNotMatch(dappSource, /createDeal을 실행했습니다/);
   assert.doesNotMatch(dappSource, /joinDeal을 실행했습니다/);
   assert.match(dappSource, /LockKeyhole/);

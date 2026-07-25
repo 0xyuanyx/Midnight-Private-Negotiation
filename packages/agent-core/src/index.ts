@@ -22,12 +22,19 @@ export type CandidateProvider = {
   ): Promise<readonly NegotiationCandidate[]>;
 };
 
+export type NegotiationModelRequest = {
+  instructions: string;
+  input: string;
+  store: false;
+};
+
 export type LocalPolicy =
   | { role: "buyer"; maximumPrice: bigint }
   | { role: "seller"; minimumPrice: bigint };
 
 const MAX_KRW = 18_446_744_073_709_551_615n;
 const MAX_CANDIDATES = 5;
+export const NEGOTIATION_PROMPT_VERSION = "2026-07-26.v1";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -85,6 +92,93 @@ const validatePublicContext = (
     }
   }
   return value;
+};
+
+const COMMON_NEGOTIATION_INSTRUCTIONS = `
+당신은 Midnight 비공개 가격 협상 DApp의 후보 생성 에이전트다.
+당신은 거래를 확정하거나 정책을 집행하지 않는다. 공개 협상 정보만 보고 다음 행동 후보를 만들며, 실제 전송·수락 가능 여부는 각 사용자 기기 안의 로컬 PolicyGuard가 최종 결정한다.
+
+[절대적인 신뢰 경계]
+- 입력으로 허용되는 정보는 role, productCode, round, currentOffer뿐이다.
+- 구매자 최대 한도, 판매자 최소 금액, commitment 난수, 비밀키, 지갑 정보, PolicyGuard 판정, 폐기된 후보, 폐기 횟수, 재요청 횟수는 알 수 없으며 요청하거나 추측해서도 안 된다.
+- 이전 응답이나 숨겨진 대화 상태가 존재한다고 가정하지 않는다. 매 요청은 완전히 독립적인 stateless 요청이다.
+- 현재 요청에 없는 정보와 상대방의 비공개 조건을 만들어내거나 사실처럼 표현하지 않는다.
+
+[협상 원칙]
+- 한 번의 후보 실패로 협상이 불필요하게 끝나지 않도록 서로 다른 가격의 후보를 1개 이상 5개 이하로 제시한다.
+- currentOffer가 있으면 첫 후보는 그 가격을 그대로 수락하는 accept 후보로 둔다. 뒤에는 역할에 맞는 신중한 counter offer 후보를 가까운 가격부터 단계적으로 배치한다.
+- 양보 폭은 갑작스럽게 크게 바꾸지 말고, 공개된 현재 제안을 기준으로 점진적으로 조정한다.
+- exact price를 포함한 모든 후보는 양의 정수 KRW 문자열이어야 한다. 쉼표, 소수점, 통화기호, 단위는 넣지 않는다.
+- accept는 currentOffer가 있을 때에만 가능하며 price는 currentOffer.price와 정확히 같아야 한다.
+- 최대 협상 라운드는 10이다. 현재 round 안에서 가능한 후보만 만들고 종료 여부를 스스로 선언하지 않는다.
+- 후보는 제안일 뿐이다. 어떤 후보가 허용될 것인지, 합의가 가능한지, 상대 한도와 겹치는지는 단정하지 않는다.
+
+[비공개 조건 비암시]
+- "최대 한도", "최소 금액", "마지노선", "최종 제안", "마지막 가격", "더는 올릴 수 없음", "더는 내릴 수 없음", "예산이 부족함", "원가 이하"처럼 비공개 경계를 직접 또는 간접적으로 암시하는 표현을 생성하지 않는다.
+- 특정 후보가 통과·거절되었다는 사실이나 재시도 중이라는 사실을 다음 판단의 근거로 삼지 않는다.
+- 후보 가격의 배열이나 간격을 비밀 한도의 부호화 수단으로 사용하지 않는다.
+
+[출력 계약]
+- 설명, 인사말, 협상 대사, 추론, Markdown, 코드 블록을 출력하지 않는다.
+- 오직 {"candidates":[...]} 형태의 JSON 객체 하나만 출력한다.
+- 각 원소는 {"action":"offer","price":"100000"} 또는 {"action":"accept","price":"100000"} 형식이며 다른 필드는 넣지 않는다.
+`.trim();
+
+const BUYER_NEGOTIATION_INSTRUCTIONS = `
+[BUYER 역할]
+- 구매자의 목표는 성급하게 높은 가격을 확정하지 않으면서도, 합의 가능성이 있는 거래를 놓치지 않는 것이다.
+- 판매자의 공개 제안이 있으면 수락 후보를 먼저 만들고, 그보다 낮은 counter offer 후보들을 현재 제안에 가까운 값부터 점진적으로 만든다.
+- 공개 제안과 라운드 흐름을 존중하며 가격을 올릴 때는 작은 단계로 신중하게 조정한다.
+- 구매자의 실제 최대 한도를 알고 있는 것처럼 말하거나, 후보 가격을 최대 한도 또는 최종 가격이라고 설명하지 않는다.
+- seller의 비공개 최소 금액을 추정하거나 떠보는 표현을 만들지 않는다.
+`.trim();
+
+const SELLER_NEGOTIATION_INSTRUCTIONS = `
+[SELLER 역할]
+- 판매자의 목표는 성급하게 낮은 가격을 확정하지 않으면서도, 합의 가능성이 있는 거래를 놓치지 않는 것이다.
+- 구매자의 공개 제안이 있으면 수락 후보를 먼저 만들고, 그보다 높은 counter offer 후보들을 현재 제안에 가까운 값부터 점진적으로 만든다.
+- 공개 제안과 라운드 흐름을 존중하며 가격을 내릴 때는 작은 단계로 신중하게 조정한다.
+- 판매자의 실제 최소 금액을 알고 있는 것처럼 말하거나, 후보 가격을 최소 금액 또는 최종 가격이라고 설명하지 않는다.
+- buyer의 비공개 최대 한도를 추정하거나 떠보는 표현을 만들지 않는다.
+`.trim();
+
+export const buildNegotiationAgentInstructions = (
+  role: AgentRole,
+): string => {
+  if (role !== "buyer" && role !== "seller") {
+    throw new Error("invalid negotiation agent role");
+  }
+  return [
+    `prompt_version=${NEGOTIATION_PROMPT_VERSION}`,
+    COMMON_NEGOTIATION_INSTRUCTIONS,
+    role === "buyer"
+      ? BUYER_NEGOTIATION_INSTRUCTIONS
+      : SELLER_NEGOTIATION_INSTRUCTIONS,
+  ].join("\n\n");
+};
+
+export const createNegotiationModelRequest = (
+  rawContext: PublicNegotiationContext,
+): NegotiationModelRequest => {
+  const context = validatePublicContext(rawContext);
+  const publicInput: PublicNegotiationContext = {
+    role: context.role,
+    productCode: context.productCode,
+    round: context.round,
+    ...(context.currentOffer === undefined
+      ? {}
+      : {
+          currentOffer: {
+            maker: context.currentOffer.maker,
+            price: context.currentOffer.price,
+          },
+        }),
+  };
+  return {
+    instructions: buildNegotiationAgentInstructions(context.role),
+    input: JSON.stringify(publicInput),
+    store: false,
+  };
 };
 
 const validateCandidates = (
@@ -242,4 +336,40 @@ export const generateAllowedCandidate = async (input: {
     }
   }
   return undefined;
+};
+
+export const generateLocalFallbackCandidate = (input: {
+  context: PublicNegotiationContext;
+  policy: LocalPolicy;
+}): NegotiationCandidate | undefined => {
+  const context = validatePublicContext(input.context);
+  if (context.role !== input.policy.role) return undefined;
+
+  if (input.policy.role === "buyer") {
+    if (context.currentOffer !== undefined) {
+      const acceptance: NegotiationCandidate = {
+        action: "accept",
+        price: context.currentOffer.price,
+      };
+      return policyAllows(input.policy, context, acceptance)
+        ? acceptance
+        : undefined;
+    }
+
+    const discounted = (input.policy.maximumPrice * 9n) / 10n;
+    const price = discounted < 1n ? 1n : discounted;
+    return { action: "offer", price: price.toString() };
+  }
+
+  if (context.currentOffer === undefined) return undefined;
+  const acceptance: NegotiationCandidate = {
+    action: "accept",
+    price: context.currentOffer.price,
+  };
+  if (policyAllows(input.policy, context, acceptance)) return acceptance;
+
+  return {
+    action: "offer",
+    price: input.policy.minimumPrice.toString(),
+  };
 };

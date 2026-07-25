@@ -135,6 +135,8 @@ Buyer와 Seller는 각자 자기 패널에서 동일한 4자리 상품 코드를
 - 한도를 잠근 직후 해당 역할에 `상대방의 입력을 기다리고 있습니다.`를 표시한다.
 - Controller는 웹에서 받은 한도 명령을 대상 런타임에 즉시 전달하고 원문을 보관·로그하지 않으며, 이후에는 Buyer·Seller의 `LIMIT_LOCKED` 상태만 확인한다.
 - 같은 상품 코드의 두 역할이 모두 `LIMIT_LOCKED`가 되면 양쪽에 `PEER_READY`를 보내 다음 단계로 진행한다.
+- 한 역할이 늦게 입장했을 때 상대 commitment가 이미 준비되어 있으면 금액 없이 상대 commitment 등록 완료 이벤트를 해당 역할에 즉시 동기화한다. 이 경우 이미 충족된 commitment에 대한 대기 로그는 표시하지 않는다.
+- 사용자가 보는 방 식별자는 네 자리 상품 코드지만 내부 session ID에는 브라우저 데모 인스턴스 ID를 포함한다. 새 페이지 실행에서 같은 상품 코드를 다시 사용해도 이전 실행의 상태·타이머·commitment와 합쳐지지 않는다.
 - 자물쇠는 “이 역할의 로컬 private state에 저장됨”을 뜻한다.
 - 잠긴 금액은 해당 역할 패널에는 그대로 보인다.
 - 상대 역할 런타임, Relay, GPT 입력, Observer 로그에는 한도를 전달하지 않는다.
@@ -534,6 +536,7 @@ type DemoEvent = {
     | "NEGOTIATING"
     | "NEGOTIATION_COMPLETE"
     | "VERIFYING"
+    | "FINALIZING"
     | "PROOFS_COMPLETE"
     | "AGREED"
     | "AUTHORIZED"
@@ -552,7 +555,7 @@ type DemoEvent = {
 - `publicAmount`는 `SETTLED` 이벤트에서만 허용한다.
 - `agreedAmount`는 Buyer·Seller의 `AGREED` 공동 이벤트에서만 허용하며 Observer에는 전달하지 않는다.
 - `correlationId`는 Buyer·Seller 공동 이벤트의 동일 시각·동일 원인을 검증한다.
-- `replaceKey`는 대기 스피너 행을 완료 행으로 교체하기 위한 화면 식별자다.
+- `replaceKey`는 같은 장기 작업의 최신 이벤트를 식별해 이전 행의 스피너만 정지하기 위한 생명주기 식별자다. 기존 로그 행은 삭제·교체하지 않는다.
 - `ROLE_LOCAL`은 자기 한도 저장·상대 입력 대기처럼 해당 역할에만 보이는 이벤트다.
 - `PARTICIPANTS`는 양쪽 입력 완료·협상 진행처럼 Buyer와 Seller가 공유하는 이벤트다.
 - `PUBLIC`은 Observer가 표시하는 공개 계약 이벤트다.
@@ -566,6 +569,7 @@ type DemoEvent = {
 - 일반 문장은 `#FFFFFF`, 시간은 `#A8A8A8`, 비공개 입력 라벨은 `#D0B36C`다.
 - 화면에 표시되는 `commitment`, `OPEN`, `AUTHORIZED` 같은 프로토콜 토큰만 `#9A9AFF`로 표시한다. 내부 `createDeal`, `joinDeal` 이벤트는 브라우저 스트림에서 제외한다.
 - Observer의 `SETTLED · 최종 금액` 한 줄만 `#9FB8A3`로 표시한다.
+- `결렬`, `CANCELLED`, 오류 식별자는 `#D65C5C`로 표시한다.
 
 ### 진행 로그
 
@@ -577,13 +581,14 @@ type DemoEvent = {
 [09:41:09] 판매자 commitment 등록을 기다리고 있습니다. ⠋
 [09:41:12] 판매자 commitment가 등록되었습니다.
 [09:41:13] 협상을 시작합니다. ⠋
-[09:41:13] AI 에이전트가 비공개로 협상하고 있습니다. ⠋
+[09:41:13] AI 에이전트가 비공개 협상을 진행하고 있습니다. ⠋
 [09:41:18] AI 에이전트의 비공개 협상이 완료되었습니다.
 [09:41:18] 모든 조건을 공개하지 않고 증명하고 있습니다. ⠋
 [09:41:24] 모든 조건 증명이 완료되었습니다.
+[09:41:24] 합의 금액을 온체인에 기록하고 있습니다. ⠋
 ```
 
-진행 중 스피너는 한 줄에서 갱신하고 완료 시 다음 상태 로그로 교체한다. 폐기된 GPT 후보, 재요청, 제안 가격, 상대 응답 원문은 표시하지 않는다.
+진행 중 로그는 한 번 출력되면 자리를 유지한다. 다음 상태가 새 행으로 추가될 때 기존 행의 스피너만 정지한다. 폐기된 GPT 후보, 재요청, 제안 가격, 상대 응답 원문은 표시하지 않는다.
 
 ### Observer 공개 상태 로그
 
@@ -606,6 +611,7 @@ type DemoEvent = {
 
 ```text
 [09:41:18] AI 에이전트의 비공개 협상이 완료되었습니다.
+[09:41:18] 협상 결과를 온체인에 반영하고 있습니다. ⠋
 [09:41:18] 협상 결과 · 결렬
 ```
 
@@ -725,9 +731,9 @@ type DemoEvent = {
 
 프로세스 격리, IPC 이벤트 배선, WebSocket 라우터, 3패널 웹 DApp, GPT mock과 역할별 PolicyGuard, 독립 Room Relay, Uint64 Compact 계약과 로컬 Midnight 연결까지 구현되었다. GPT API 키가 없어도 암호화된 로컬 결정론적 협상 provider로 성사·결렬 화면을 검증할 수 있다.
 
-현재 구현에는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller, WebSocket, 터미널 입력 UI, 한도를 받지 않는 최대 5개 후보 GPT mock, 역할별 로컬 PolicyGuard, 판정 결과 없는 최대 3회 stateless 재요청, Controller를 우회해 Buyer·Seller가 직접 연결하는 독립 Room Relay, X25519와 HKDF-SHA-256 세션 키, 메타데이터 AAD를 사용하는 AES-256-GCM 불투명 협상 패킷, sequence replay·nonce 재사용·방 교차 차단, 최대 10라운드 협상이 포함된다.
+현재 구현에는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller, WebSocket, 터미널 입력 UI, 한도를 받지 않는 최대 5개 후보 GPT mock, 역할별 로컬 PolicyGuard, 판정 결과 없는 최대 3회 stateless 재요청, 외부 AI 없이 동작하는 역할 로컬 fallback, Controller를 우회해 Buyer·Seller가 직접 연결하는 독립 Room Relay, X25519와 HKDF-SHA-256 세션 키, 메타데이터 AAD를 사용하는 AES-256-GCM 불투명 협상 패킷, sequence replay·nonce 재사용·방 교차 차단, 최대 10라운드 협상이 포함된다. fallback은 한도를 provider 입력으로 전달하지 않고 런타임 내부에서만 안전한 제안·수락을 결정한다.
 
-로컬 체인 모드에서는 Buyer가 무작위 지갑과 private state로 계약을 배포하고 Seller가 암호화 채널로 받은 계약에 참여한다. Buyer의 `authorizeHiddenPrice`와 Seller의 `settle`은 서로 다른 proof server를 사용한다. Observer 프로세스는 지갑, private state, proof server 구성을 받지 않고 Indexer 공개 상태만 조회한다. Controller는 mock 타이머로 공개 상태를 만들지 않으며 Observer가 Indexer에서 확인한 `OPEN`, `AUTHORIZED`, `SETTLED`만 WebSocket으로 전달한다. 실제 로컬 체인 E2E에서 최종 `100,000 KRW`가 `SETTLED` 이전에는 공개 이벤트에 나타나지 않는 것을 확인했다.
+로컬 체인 모드에서는 Buyer가 무작위 지갑과 private state로 계약을 배포하고 Seller가 암호화 채널로 받은 계약에 참여한다. Buyer의 `authorizeHiddenPrice`와 Seller의 `settle`은 서로 다른 proof server를 사용한다. Observer 프로세스는 지갑, private state, proof server 구성을 받지 않고 Indexer 공개 상태만 조회한다. Controller는 mock 타이머로 공개 상태를 만들지 않으며 Observer가 Indexer에서 확인한 `OPEN`, `AUTHORIZED`, `SETTLED`만 WebSocket으로 전달한다. 실제 로컬 체인 E2E에서 Buyer `1,000,000 KRW`, Seller `700,000 KRW` 조건이 외부 AI 키 없이 `700,000 KRW`로 합의되고, 최종 금액이 `SETTLED` 이전 공개 이벤트에는 나타나지 않는 것을 확인했다.
 
 다음 작업 묶음이 남아 있다.
 

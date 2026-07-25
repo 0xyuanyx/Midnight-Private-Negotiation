@@ -24,6 +24,7 @@ import {
 import {
   createDeterministicMockProvider,
   generateAllowedCandidate,
+  generateLocalFallbackCandidate,
   type NegotiationCandidate,
   type PublicNegotiationContext,
 } from "@midnight-negotiation/agent-core";
@@ -407,14 +408,15 @@ const respondToProposal = async (input: {
       price: input.price,
     },
   };
-  const candidate = await generateAllowedCandidate({
+  const policy = {
+    role,
+    minimumPrice: sellerMinPrice,
+  } as const;
+  const candidate = (await generateAllowedCandidate({
     provider: candidateProvider,
     context,
-    policy: {
-      role,
-      minimumPrice: sellerMinPrice,
-    },
-  });
+    policy,
+  })) ?? generateLocalFallbackCandidate({ context, policy });
   if (candidate === undefined) {
     relay({
       kind: "decline",

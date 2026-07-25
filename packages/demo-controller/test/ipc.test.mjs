@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { IsolatedRuntimeController } from "../dist/index.js";
+import {
+  createRoomSessionId,
+  IsolatedRuntimeController,
+} from "../dist/index.js";
 
 const waitFor = (controller, predicate, timeoutMs = 7_000) =>
   new Promise((resolve, reject) => {
@@ -16,6 +19,20 @@ const waitFor = (controller, predicate, timeoutMs = 7_000) =>
       resolve(event);
     });
   });
+
+test("scopes identical product codes to one browser demo instance", () => {
+  const first = createRoomSessionId(
+    "1111",
+    "12345678-1234-1234-1234-123456789abc",
+  );
+  const second = createRoomSessionId(
+    "1111",
+    "abcdefab-1234-1234-1234-123456789abc",
+  );
+
+  assert.equal(first, "room-1111-12345678-1234-1234-1234-123456789abc");
+  assert.notEqual(first, second);
+});
 
 test("streams the private negotiation flow from three isolated runtimes", async () => {
   const controller = new IsolatedRuntimeController();
@@ -200,6 +217,22 @@ test("streams the private negotiation flow from three isolated runtimes", async 
     assert.equal(openEvent.audience, "PUBLIC");
     assert.equal(settledEvent.publicAmount, "100000");
 
+    const buyerProgress = events
+      .filter((event) => event.panel === "buyer")
+      .map((event) => event.messageCode);
+    assert.ok(
+      buyerProgress.indexOf("SELLER_COMMITMENT_REGISTERED") <
+        buyerProgress.indexOf("NEGOTIATION_START"),
+    );
+    assert.ok(
+      buyerProgress.indexOf("NEGOTIATION_START") <
+        buyerProgress.indexOf("NEGOTIATING"),
+    );
+    assert.ok(
+      buyerProgress.indexOf("NEGOTIATING") <
+        buyerProgress.indexOf("NEGOTIATION_COMPLETE"),
+    );
+
     const participantAgreement = events.filter(
       (event) => event.messageCode === "NEGOTIATION_SETTLED",
     );
@@ -228,6 +261,128 @@ test("streams the private negotiation flow from three isolated runtimes", async 
     );
   } finally {
     unsubscribe();
+    await controller.shutdown();
+  }
+});
+
+test("syncs an existing Buyer commitment before a late Seller enters a limit", async () => {
+  const controller = new IsolatedRuntimeController();
+  const events = [];
+  const unsubscribe = controller.onDemoEvent((event) => events.push(event));
+
+  try {
+    await controller.start();
+    controller.joinRoom("buyer", {
+      sessionId: "room-6248",
+      productCode: "6248",
+    });
+    await waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" && event.messageCode === "WAITING_SELLER",
+    );
+
+    controller.setLimit("buyer", {
+      sessionId: "room-6248",
+      limitKrw: "500000",
+    });
+    await waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" &&
+        event.messageCode === "WAITING_SELLER_COMMITMENT",
+    );
+
+    const sellerSeesExistingCommitment = waitFor(
+      controller,
+      (event) =>
+        event.panel === "seller" &&
+        event.messageCode === "BUYER_COMMITMENT_REGISTERED",
+      1_000,
+    );
+    controller.joinRoom("seller", {
+      sessionId: "room-6248",
+      productCode: "6248",
+    });
+    await sellerSeesExistingCommitment;
+
+    const sellerProgressBeforeLimit = events
+      .filter((event) => event.panel === "seller")
+      .map((event) => event.messageCode);
+    assert.ok(sellerProgressBeforeLimit.includes("BUYER_JOINED"));
+    assert.ok(sellerProgressBeforeLimit.includes("BUYER_COMMITMENT_REGISTERED"));
+    assert.equal(
+      sellerProgressBeforeLimit.includes("WAITING_BUYER_COMMITMENT"),
+      false,
+    );
+
+    const settled = waitFor(
+      controller,
+      (event) =>
+        event.panel === "observer" && event.messageCode === "OBSERVER_SETTLED",
+    );
+    controller.setLimit("seller", {
+      sessionId: "room-6248",
+      limitKrw: "300000",
+    });
+    const result = await settled;
+    assert.equal(result.publicAmount, "300000");
+    assert.equal(
+      events.some(
+        (event) =>
+          event.panel === "seller" &&
+          event.messageCode === "WAITING_BUYER_COMMITMENT",
+      ),
+      false,
+    );
+  } finally {
+    unsubscribe();
+    await controller.shutdown();
+  }
+});
+
+test("settles overlapping 1,000,000 and 700,000 KRW limits without an external AI key", async () => {
+  const controller = new IsolatedRuntimeController();
+  try {
+    await controller.start();
+    controller.joinRoom("buyer", {
+      sessionId: "room-1111",
+      productCode: "1111",
+    });
+    controller.joinRoom("seller", {
+      sessionId: "room-1111",
+      productCode: "1111",
+    });
+    await waitFor(
+      controller,
+      (event) =>
+        event.panel === "seller" && event.messageCode === "BUYER_JOINED",
+    );
+
+    controller.setLimit("buyer", {
+      sessionId: "room-1111",
+      limitKrw: "1000000",
+    });
+    await waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" &&
+        event.messageCode === "WAITING_SELLER_COMMITMENT",
+    );
+
+    const settled = waitFor(
+      controller,
+      (event) =>
+        event.panel === "observer" && event.messageCode === "OBSERVER_SETTLED",
+    );
+    controller.setLimit("seller", {
+      sessionId: "room-1111",
+      limitKrw: "700000",
+    });
+
+    const event = await settled;
+    assert.equal(event.publicAmount, "700000");
+  } finally {
     await controller.shutdown();
   }
 });

@@ -24,6 +24,7 @@ import {
 import {
   createDeterministicMockProvider,
   generateAllowedCandidate,
+  generateLocalFallbackCandidate,
   type NegotiationCandidate,
   type PublicNegotiationContext,
 } from "@midnight-negotiation/agent-core";
@@ -506,14 +507,15 @@ const generateAndExecute = async (
     throw new Error("buyer negotiation is not ready");
   }
 
-  const candidate = await generateAllowedCandidate({
+  const policy = {
+    role,
+    maximumPrice: buyerMaxPrice,
+  } as const;
+  const candidate = (await generateAllowedCandidate({
     provider: candidateProvider,
     context,
-    policy: {
-      role,
-      maximumPrice: buyerMaxPrice,
-    },
-  });
+    policy,
+  })) ?? generateLocalFallbackCandidate({ context, policy });
   if (candidate === undefined) {
     publishOutcome({ result: "CANCELLED" });
     return;
