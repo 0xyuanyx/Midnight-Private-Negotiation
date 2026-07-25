@@ -120,8 +120,10 @@ Use the unified terminal line format `[HH:mm:ss] [SYSTEM] 메시지`. Keep only 
 - `[09:41:14] [SYSTEM] 거래가 생성되었습니다.`
 - `[09:41:17] [SYSTEM] 판매자가 거래에 참여했습니다.`
 - `[09:41:18] [SYSTEM] 공개 상태: OPEN`
+- `[09:41:43] [SYSTEM] AUTHORIZED · 가격 커밋 등록(금액 비공개)`
+- `[09:41:51] [SYSTEM] SETTLED · 100,000 KRW`
 
-The primary visual draft captures the negotiation-in-progress moment, so Observer stops at `OPEN`. `AUTHORIZED` and `SETTLED · 100,000 KRW` appear only after negotiation completes.
+The primary visual draft captures the negotiation-in-progress moment, so Observer stops at `OPEN`. In the live flow, `AUTHORIZED · 가격 커밋 등록(금액 비공개)` provides the explicit privacy contrast before `SETTLED · 100,000 KRW` discloses the final amount.
 
 Observer is not a block explorer. Do not list unrelated transactions, gas, addresses, charts, or complete commitment values.
 

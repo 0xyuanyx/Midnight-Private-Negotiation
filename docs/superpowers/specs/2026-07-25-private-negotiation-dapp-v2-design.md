@@ -136,7 +136,7 @@ Buyer·Seller가 같은 상품 코드 입력
 → 역할별 GPT가 후보 제안 생성
 → 각 PolicyGuard가 로컬 한도로 후보 검사
 → 통과한 협상 메시지만 암호화하여 Relay 전송
-→ 최대 6라운드 안에 합의 또는 결렬
+→ 최대 10라운드 안에 합의 또는 결렬
 → 합의 시 Buyer 조건 증명
 → 합의 가격 opening을 Seller에게 암호화 전달
 → Seller 조건 증명 및 settle
@@ -226,6 +226,7 @@ flowchart LR
 - 계약 주소와 Indexer endpoint만 입력받는다.
 - 지갑, private state, proof server, GPT, Relay 복호화 키를 갖지 않는다.
 - `WAITING_SELLER → OPEN → AUTHORIZED → SETTLED/CANCELLED` 공개 상태만 조회한다.
+- `AUTHORIZED`에서는 `가격 커밋 등록(금액 비공개)`를 표시해 가격이 아직 공개되지 않았음을 명시한다.
 - 최종 가격은 `SETTLED`에서만 표시한다.
 
 ## 9. GPT 데이터 경계
@@ -331,7 +332,7 @@ PolicyGuard → 로컬 한도로 순서대로 검사
 
 ## 12. 협상 라운드
 
-최대 협상 라운드는 6이다.
+최대 협상 라운드는 10이다.
 
 > 하나의 가격 제안과 상대방의 `accept`, `counter`, `reject` 응답까지를 1라운드로 센다.
 
@@ -340,12 +341,14 @@ Round 1: Buyer 제안 → Seller 응답
 Round 2: Seller counter → Buyer 응답
 Round 3: Buyer counter → Seller 응답
 ...
-Round 6 종료 시 미합의 → CANCELLED
+Round 10 종료 시 미합의 → CANCELLED
 ```
 
 - 정상적인 성공 데모는 2~3라운드를 목표로 한다.
 - 내부 GPT 재요청은 협상 라운드에 포함하지 않는다.
-- 6라운드까지 합의하지 못하면 가격 없이 협상 결렬로 끝낸다.
+- 10라운드까지 합의하지 못하면 가격 없이 협상 결렬로 끝낸다.
+- 10라운드는 합의를 강제하는 값이 아니라 API 비용, 대기 시간, 무한 반복을 제한하는 운영상 안전장치다.
+- 구현에서는 `MAX_NEGOTIATION_ROUNDS=10`처럼 조정 가능한 설정값으로 둔다.
 - Buyer·Seller 증명은 합의 후에만 시작한다.
 
 ## 13. Relay 암호화
@@ -476,6 +479,7 @@ type DemoEvent = {
     | "NEGOTIATING"
     | "BUYER_VERIFYING"
     | "SELLER_VERIFYING"
+    | "AUTHORIZED"
     | "SETTLED"
     | "CANCELLED"
     | "ERROR";
@@ -503,6 +507,16 @@ type DemoEvent = {
 ```
 
 진행 중 스피너는 한 줄에서 갱신하고 완료 시 다음 상태 로그로 교체한다. 폐기된 GPT 후보, 재요청, 제안 가격, 상대 응답 원문은 표시하지 않는다.
+
+### Observer 공개 상태 로그
+
+```text
+[09:41:18] [SYSTEM] OPEN
+[09:41:43] [SYSTEM] AUTHORIZED · 가격 커밋 등록(금액 비공개)
+[09:41:51] [SYSTEM] SETTLED · 100,000 KRW
+```
+
+`AUTHORIZED`에는 금액을 포함하지 않는다. 금액은 Indexer에서 `SETTLED`를 확인한 뒤 마지막 줄에서만 표시한다.
 
 ### 성공
 
@@ -541,7 +555,7 @@ type DemoEvent = {
 | GPT timeout·스키마 오류 | stateless 재요청, 최대 3회 | 협상 스피너 유지 |
 | 모든 GPT 후보 정책 위반 | 후보 폐기 후 stateless 재요청 | 협상 스피너 유지 |
 | 로컬 fallback도 행동 생성 불가 | 기술 오류로 실행 종료 | `협상을 계속할 수 없습니다.` |
-| 6라운드 미합의 | 역할별 취소 회로 실행 | `협상이 결렬되었습니다.` |
+| 10라운드 미합의 | 역할별 취소 회로 실행 | `협상이 결렬되었습니다.` |
 | Relay 중복·순서 오류 | envelope 거부 | `협상 연결을 확인할 수 없습니다.` |
 | 암호문 인증 실패 | 복호화 거부, 세션 종료 | `협상 연결을 확인할 수 없습니다.` |
 | Buyer 증명 실패 | `AUTHORIZED`로 진행하지 않음 | `구매자 조건을 증명하지 못했습니다.` |
@@ -579,7 +593,7 @@ type DemoEvent = {
 ### 협상
 
 - 겹치는 한도에서 2~3라운드 성공 시나리오가 재현된다.
-- 겹치지 않는 한도에서 6라운드 이내 또는 종료 정책에 따라 금액 없이 결렬된다.
+- 겹치지 않는 한도에서 10라운드 이내 또는 종료 정책에 따라 금액 없이 결렬된다.
 - GPT 응답이 잘못되거나 모든 후보가 무효여도 private 판정이 외부로 노출되지 않는다.
 - Buyer와 Seller의 GPT 요청 기록에 상대·자기 한도 원문이 없다.
 

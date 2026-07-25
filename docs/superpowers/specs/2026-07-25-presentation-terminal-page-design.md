@@ -114,7 +114,7 @@ Buyer sample lines cover wallet readiness, private-state loading, deal creation,
 
 Seller sample lines cover wallet readiness, contract attachment, joining, and the non-disclosing negotiation status.
 
-Observer sample lines are state-dependent. During negotiation it shows public deal creation, seller participation, and current state `OPEN`. After successful negotiation, proof completion and `합의 금액 100,000 KRW가 온체인에 기록되었습니다.` may append. On failure it appends only `협상이 결렬되었습니다.` with no amount. It must not resemble a full-chain transaction feed.
+Observer sample lines are state-dependent. During negotiation it shows public deal creation, seller participation, and current state `OPEN`. After Buyer authorization it appends `AUTHORIZED · 가격 커밋 등록(금액 비공개)`, with no amount. Only after successful settlement does it append `SETTLED · 100,000 KRW`. On failure it appends only `협상이 결렬되었습니다.` with no amount. It must not resemble a full-chain transaction feed.
 
 No view displays the AI agents' conversation, reasoning, proposals, counteroffers, private price limits, or intermediate prices as logs. Buyer and Seller see only their own input field plus a coarse status; Observer sees only public contract state.
 
