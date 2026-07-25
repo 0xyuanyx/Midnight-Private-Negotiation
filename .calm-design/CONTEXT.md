@@ -23,7 +23,7 @@ interview:
     confidence: 0.95
   q5_goal:
     question: "가장 원하는 사용자 행동은 무엇인가요?"
-    answer: "조작 없이 Buyer·Seller·Observer의 흐름을 한눈에 따라간다"
+    answer: "Buyer와 Seller가 각자의 비공개 가격 한도를 입력한 뒤 세 역할의 흐름을 한눈에 따라간다"
     confidence: 0.95
 
 parsed:
@@ -37,7 +37,7 @@ parsed:
     avoid: ["hype", "playfulness", "visual_noise"]
   memorable_point:
     type: "privacy_boundary"
-    value: "Private limits stay private; only rule satisfaction is proven."
+    value: "Private limits and negotiation contents stay private; only rule satisfaction is proven."
     emphasis: "private_vs_public"
   competitor_avoidance:
     patterns:
@@ -46,7 +46,7 @@ parsed:
       - "ai_marketing_copy"
       - "decorative_gradients"
   business_goal:
-    primary_action: "passive_demo_observation"
+    primary_action: "set_private_limits_then_observe"
     conversion_priority: "none"
 
 design_mappings:
@@ -59,8 +59,8 @@ design_mappings:
     accent: "#0000FE"
     source: "https://midnight.network/"
   motion:
-    intensity: 1
-    style: "static"
+    intensity: 2
+    style: "negotiating_spinner_only"
   typography:
     ui: "Pretendard"
     terminal: "system_monospace"
@@ -74,9 +74,11 @@ design_mappings:
       - "마케팅 문구와 장식용 배지 금지"
       - "그래디언트·글로우·유리 효과 금지"
       - "이번 범위에서 WebSocket·터미널 연결 구현 금지"
+      - "패널 배경을 상태색으로 칠하지 않고 텍스트에만 의미색 사용"
+      - "AI 협상 내용·추론·제안 내역을 화면 로그에 노출 금지"
   suggested_dials:
     variance: 3
-    motion: 1
+    motion: 2
     density: 6
     language: "ko"
 
