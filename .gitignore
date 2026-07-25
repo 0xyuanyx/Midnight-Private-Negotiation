@@ -67,3 +67,7 @@ managed/
 # Python demo cache
 __pycache__/
 *.py[cod]
+
+# Design workflow scratch files
+.superpowers/
+.superdesign/tmp/
