@@ -72,3 +72,6 @@ __pycache__/
 .superpowers/
 .superdesign/tmp/
 .superdesign/reviews/
+
+# Archived v1 demo
+/v1/
