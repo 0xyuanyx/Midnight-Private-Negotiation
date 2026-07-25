@@ -94,6 +94,10 @@ Counter 예제를 기반으로 만든 기존 데모는 `v1/` 아래에 실행 �
 
 Buyer와 Seller는 각자 자기 패널에서 동일한 4자리 상품 코드를 입력한다. 공용 상품 코드 입력은 사용하지 않는다.
 
+### 프로그램 시작 전
+
+페이지를 열었을 때는 Buyer·Seller·Observer 패널의 터미널 외곽만 표시한다. 입력 행, 상태 문구, 샘플 로그를 자동으로 생성하지 않는다. Demo Controller가 세 역할 프로세스의 `RUNTIME_READY`를 모두 검증하면 `READY_FOR_INPUT` UI 상태로 전환하고 Buyer·Seller 상품 코드 입력을 동시에 표시한다.
+
 ### Buyer
 
 ```text
@@ -127,6 +131,9 @@ Buyer와 Seller는 각자 자기 패널에서 동일한 4자리 상품 코드를
 - 코드를 제출하면 같은 위치가 역할별 한도 입력 행으로 전환된다.
 - 금액은 양의 정수 KRW이며 표시할 때 천 단위 구분 쉼표를 사용한다.
 - 금액 제출 후 해당 행은 잠긴 읽기 상태가 된다.
+- 한도를 잠근 직후 해당 역할에 `상대방의 입력을 기다리고 있습니다.`를 표시한다.
+- Controller는 한도 금액이 아니라 Buyer·Seller의 `LIMIT_LOCKED` 상태만 확인한다.
+- 같은 상품 코드의 두 역할이 모두 `LIMIT_LOCKED`가 되면 양쪽에 `PEER_READY`를 보내 다음 단계로 진행한다.
 - 자물쇠는 “이 역할의 로컬 private state에 저장됨”을 뜻한다.
 - 잠긴 금액은 해당 역할 패널에는 그대로 보인다.
 - 상대 역할 런타임, Relay, GPT 입력, Observer 로그에는 한도를 전달하지 않는다.
@@ -473,7 +480,8 @@ WAITING_SELLER
 ### 로컬 데모 상태
 
 ```text
-SETUP
+PRE_START
+→ READY_FOR_INPUT
 → ROOM_JOINED
 → LIMIT_LOCKED
 → WAITING_PEER
@@ -488,7 +496,7 @@ SETUP
 
 | 화면 상태 | 온체인 상태 | 공개 금액 |
 |---|---|---|
-| `SETUP`–`COMMITTING` | 없음 또는 `WAITING_SELLER` | 없음 |
+| `PRE_START`–`COMMITTING` | 없음 또는 `WAITING_SELLER` | 없음 |
 | `NEGOTIATING` | `OPEN` | 없음 |
 | `BUYER_VERIFYING` | `OPEN` | 없음 |
 | `SELLER_VERIFYING` | `AUTHORIZED` | 없음 |
@@ -500,15 +508,19 @@ SETUP
 
 역할 런타임과 Observer는 UI에 자유 형식 stdout을 직접 전달하지 않는다. 다음과 같은 정제된 이벤트만 Demo Controller에 보낸다.
 
+`RUNTIME_READY`는 프로세스 제어 메시지이며 사용자 로그가 아니다. Controller가 Buyer·Seller·Observer의 준비 메시지를 모두 확인한 뒤 웹에 `READY_FOR_INPUT` 화면 상태를 한 번만 알린다.
+
 ```ts
 type DemoEvent = {
   id: string;
   occurredAt: string;
   panel: "buyer" | "seller" | "observer";
+  audience: "ROLE_LOCAL" | "PARTICIPANTS" | "PUBLIC";
   state:
     | "ROOM_JOINED"
     | "LIMIT_LOCKED"
     | "WAITING_PEER"
+    | "PEER_READY"
     | "COMMITTING"
     | "NEGOTIATING"
     | "BUYER_VERIFYING"
@@ -523,6 +535,10 @@ type DemoEvent = {
 ```
 
 - `publicAmount`는 `SETTLED` 이벤트에서만 허용한다.
+- `ROLE_LOCAL`은 자기 한도 저장·상대 입력 대기처럼 해당 역할에만 보이는 이벤트다.
+- `PARTICIPANTS`는 양쪽 입력 완료·협상 진행처럼 Buyer와 Seller가 공유하는 이벤트다.
+- `PUBLIC`은 Observer가 표시하는 공개 계약 이벤트다.
+- 웹은 `audience`를 표시 색상에 매핑하되, 색만으로 범위를 표현하지 않고 메시지 문구도 함께 사용한다.
 - UI가 `messageCode`를 한국어 문구로 변환한다.
 - 자유 형식 예외 메시지, stack trace, 주소, commitment 원문을 그대로 렌더링하지 않는다.
 - 모든 사용자용 로그는 `[HH:mm:ss] [SYSTEM] 메시지` 형식이다.
@@ -533,6 +549,8 @@ type DemoEvent = {
 ```text
 [09:41:02] [SYSTEM] 상품 코드 4821 협상방에 입장했습니다.
 [09:41:08] [SYSTEM] 구매자 조건을 로컬 비공개 상태에 저장했습니다.
+[09:41:09] [SYSTEM] 상대방의 입력을 기다리고 있습니다.
+[09:41:11] [SYSTEM] 양쪽 조건 입력이 완료되었습니다.
 [09:41:12] [SYSTEM] 거래 생성을 준비하고 있습니다.
 [09:41:18] [SYSTEM] AI 에이전트가 비공개로 협상하고 있습니다. ⠋
 [09:41:24] [SYSTEM] 구매자 조건을 공개하지 않고 증명하고 있습니다.
@@ -669,10 +687,9 @@ type DemoEvent = {
 
 ## 22. 구현 계획으로 넘길 결정
 
-다음 항목은 제품 요구가 아니라 구현 선택이므로 별도 구현 계획에서 파일·라이브러리·작업 순서로 구체화한다.
+다음 항목은 제품 요구가 아니라 남은 구현 선택이므로 후속 계획에서 구체화한다.
 
 - 웹 프레임워크와 역할 런타임 transport
-- 프로세스 실행 방식과 개발용 orchestration
 - OpenAI 모델명과 SDK 버전
 - X25519·HKDF·AES-GCM 구현 라이브러리
 - 로컬 모델 어댑터 구현 시점
@@ -682,16 +699,14 @@ type DemoEvent = {
 
 ## 23. 개발 착수 상태
 
-프로세스 격리와 웹 이벤트 배선까지 확정되었으므로 구현을 막는 설계 결정은 남아 있지 않다. GPT API 키가 아직 없어도 mock 협상 provider와 결정론적 fallback으로 개발과 화면 검증을 먼저 진행할 수 있다.
+프로세스 격리와 IPC 이벤트 배선까지 확정되었으므로 구현을 막는 설계 결정은 남아 있지 않다. GPT API 키가 아직 없어도 mock 협상 provider와 결정론적 fallback으로 개발과 화면 검증을 먼저 진행할 수 있다.
 
-v2 구현은 아직 시작하지 않았으며 다음 작업 묶음이 남아 있다.
+v2는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller IPC 뼈대까지 구현되었다. 다음 작업 묶음이 남아 있다.
 
-1. monorepo와 공용 protocol 패키지 생성
-2. Buyer·Seller·Observer 별도 프로세스와 Demo Controller IPC 구현
-3. WebSocket 명령·이벤트 라우터와 3패널 웹 UI 구현
-4. PolicyGuard, 최대 10라운드 협상 엔진, mock·GPT provider 구현
-5. X25519·HKDF·AES-GCM Room Relay 구현
-6. Uint64 가격을 사용하는 새 Midnight 계약과 Indexer Observer 연결
-7. 성공·결렬·오류 E2E 테스트, 프라이버시 감사, 발표 화면 검증
+1. WebSocket 명령·이벤트 라우터와 3패널 웹 UI 연결
+2. PolicyGuard, 최대 10라운드 협상 엔진, mock·GPT provider 구현
+3. X25519·HKDF·AES-GCM Room Relay 구현
+4. Uint64 가격을 사용하는 새 Midnight 계약과 Indexer Observer 연결
+5. 성공·결렬·오류 E2E 테스트, 프라이버시 감사, 발표 화면 검증
 
-구현 순서는 1–4로 로컬 mock 데모를 먼저 완성한 다음 5–6을 연결하고, 마지막에 7로 전체 경계를 검증한다.
+구현 순서는 1–2로 로컬 mock 데모를 먼저 완성한 다음 3–4를 연결하고, 마지막에 5로 전체 경계를 검증한다.
