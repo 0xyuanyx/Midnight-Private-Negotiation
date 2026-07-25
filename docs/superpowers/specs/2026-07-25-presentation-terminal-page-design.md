@@ -57,11 +57,13 @@ Panel surfaces remain neutral. Color is applied only to text with stable semanti
 
 - Metadata: `#A8A8A8`
 - Protocol action/current stage: `#9A9AFF`
-- Private input label: `#D0B36C`
+- Private input and private-operation token: `#D0B36C`
 - Success/final state: `#9FB8A3`
 - Primary message/value: `#FFFFFF`
+- Buyer heading only: clear blue-gray `#A9C2E6`
+- Seller heading only: clear sand-gold `#D6B879`
 
-This is not general-purpose syntax highlighting. A color must not be introduced without a semantic role.
+This is not general-purpose syntax highlighting. The two role colors are restricted to the `BUYER` and `SELLER` heading text; panel backgrounds, status dots, and log content continue to use the shared semantic system. Observer remains white.
 
 ## Components
 
@@ -87,11 +89,11 @@ Buyer uses `구매자 최대 한도`; Seller uses `판매자 최소 금액`. Bef
 
 ### TerminalLine
 
-Uses the single format `[HH:mm:ss] 메시지`. Because every visible line is a sanitized system event, `[SYSTEM]`, `[BUYER]`, and `[SELLER]` tags are omitted. Time is gray, ordinary prose is white, private input labels are gold, and only visible protocol identifiers such as `commitment`, `OPEN`, and `AUTHORIZED` are lavender. Internal contract actions such as `createDeal` and `joinDeal` never enter the browser display stream. The only full sage-green line is Observer `SETTLED · 최종 금액`.
+Uses the single format `[HH:mm:ss] 메시지`. Because every visible line is a sanitized system event, `[SYSTEM]`, `[BUYER]`, and `[SELLER]` tags are omitted. Time is gray and ordinary prose is white. `비공개 상태`, `비공개 협상`, and `금액 비공개` are gold; proof, `OPEN`, and `AUTHORIZED` tokens are lavender; agreement, `거래 확정`, `SETTLED`, and the final amount are sage green. Repeated price-commitment prose remains white. Color is scoped to meaning-bearing tokens rather than the full sentence. Internal contract actions such as `createDeal` and `joinDeal` never enter the browser display stream.
 
 ### NegotiatingStatus
 
-After both commitments are ready, Buyer and Seller receive `협상을 시작합니다.` at the same timestamp with a small terminal spinner. Approximately 0.8 seconds later, `AI 에이전트가 비공개 협상을 진행하고 있습니다.` is appended as a new row with the spinner still active. The start row remains in place and its spinner stops. The status intentionally contains no proposal amount, counteroffer, agent message, reasoning trace, or intermediate decision.
+After both commitments are ready, Buyer and Seller receive `협상을 시작합니다.` at the same timestamp with a small terminal spinner. Approximately 0.8 seconds later, `AI 에이전트가 비공개 협상을 진행하고 있습니다.` is appended as a new row with the spinner still active. The start row remains in place and its spinner stops. The status intentionally contains no proposal amount, counteroffer, agent message, reasoning trace, intermediate decision, round count, or retry count. The maximum ten rounds remain an internal termination rule and are never rendered as `(1/10)`.
 
 The spinner is the only recurring motion. It runs only while the state is negotiating, stops on completion or error, and becomes a static glyph under `prefers-reduced-motion`.
 
@@ -103,7 +105,7 @@ The spinner is the only recurring motion. It runs only while the state is negoti
 4. Buyer와 Seller가 각자 동일한 네 자리 상품 코드 입력
 5. Buyer 최대 한도와 Seller 최소 금액 입력
 6. 각 조건을 역할별 로컬 비공개 상태에 저장하고 자기 패널에서 잠긴 값으로 표시
-7. 먼저 입장한 역할에는 상대 입장 대기를, 먼저 조건을 입력한 역할에는 상대 commitment 대기를 표시
+7. 상대 입장 또는 상대 가격 커밋이 아직 없을 때만 실제 대기 로그와 회전 아이콘 표시
 8. 상대 입장·commitment 완료 이벤트는 새 행으로 추가하고 기존 대기 행의 스피너만 정지
 9. 구매자·판매자 commitment 생성. 내부 `createDeal`·`joinDeal` 이벤트는 화면 스트림에서 제외
 10. 양쪽에 같은 시각으로 `협상을 시작합니다. ⠋` 표시
@@ -116,23 +118,25 @@ The spinner is the only recurring motion. It runs only while the state is negoti
 
 ## Runtime Content
 
-The browser does not schedule presentation logs from page load or timers. Every displayed log comes from a validated runtime `DemoEvent` over the local WebSocket. Waiting lines use a stable lifecycle key so completion stops only the spinner; every existing log row remains immutable and the next state is appended.
+The browser does not schedule presentation logs from page load or timers. Every displayed log comes from a validated runtime `DemoEvent` over the local WebSocket. Before emitting a waiting event, the Controller checks whether the peer or peer commitment is already present. Waiting lines use a stable lifecycle key so completion stops only the spinner; every existing log row remains immutable and the next state is appended.
 
 Buyer sample lines cover room entry, private-condition storage, commitment readiness, and the non-disclosing negotiation status.
 
 Seller sample lines cover room entry, private-condition storage, commitment readiness, and the non-disclosing negotiation status.
 
-Observer sample lines are state-dependent. During negotiation it shows public deal creation, seller participation, and current state `OPEN`. After Buyer authorization it appends `AUTHORIZED · 가격 커밋 등록(금액 비공개)`, with no amount. Only after successful settlement does it append `SETTLED · 100,000 KRW`. On failure it appends only `협상이 결렬되었습니다.` with no amount. It must not resemble a full-chain transaction feed.
+Observer sample lines are state-dependent. During negotiation it shows `거래 개시 · OPEN`. After Buyer authorization it appends `가격 조건 승인 · AUTHORIZED · 금액 비공개`, with no amount. Only after successful settlement does it append `거래 확정 · SETTLED · 100,000 KRW`. On failure it appends `거래 취소 · CANCELLED · 공개된 금액 없음`. It must not resemble a full-chain transaction feed.
 
-No view displays the AI agents' conversation, reasoning, proposals, counteroffers, private price limits, or intermediate prices as logs. Buyer and Seller see only their own input field plus a coarse status; Observer sees only public contract state.
+No view displays the AI agents' conversation, reasoning, proposals, counteroffers, private price limits, intermediate prices, round count, or retry count as logs. Buyer and Seller see only their own input field plus a coarse status; Observer sees only public contract state.
 
 Runtime events carry an explicit audience. `ROLE_LOCAL` lines such as private-condition storage and peer-input waiting use the private text role. `PARTICIPANTS` lines shared by Buyer and Seller use the protocol text role. `PUBLIC` lines belong to Observer and use the public-state tone. Color is supplementary; the literal message must still identify the state.
 
-All prose UI and log messages are Korean. English remains only where it is a real role name or visible protocol identifier, including `Buyer`, `Seller`, `Observer`, `commitment`, `OPEN`, `AUTHORIZED`, and `SETTLED`.
+All prose UI and log messages are Korean-first. English remains only where it is a real role name or visible protocol identifier, including `Buyer`, `Seller`, `Observer`, `OPEN`, `AUTHORIZED`, `SETTLED`, and `CANCELLED`. Participant logs use the Korean term `가격 커밋` without a parenthetical English duplicate.
 
 ## Data Flow
 
 Buyer and Seller inputs travel over one local WebSocket to the trusted demo-only Controller, which forwards each command immediately to the matching isolated role process over IPC without storing or logging the limit. Each role process pushes only sanitized `DemoEvent` messages back over IPC; the Controller validates the sender role and routes them to the matching web panel. Observer receives public contract data through Midnight Indexer and sends sanitized public events through the same path. The page never renders raw role stdout or derives Observer output from private browser inputs.
+
+The main presentation does not render wallet addresses, transaction hashes, or block numbers. In local-chain mode these identifiers do not provide a public explorer proof, and they dilute the privacy-first message. A future public-network verification capture may show a truncated explorer reference outside the three-panel demo, but it is not part of the primary log contract.
 
 ## Error Handling
 
@@ -162,8 +166,10 @@ Formatting errors remain attached to the relevant input. Runtime, Relay, GPT, pr
 - Confirm Buyer and Seller each have one product-code state and one role-specific limit state; Observer has neither.
 - Confirm both locked role rows show their own submitted value with a lock and never repeat the amount in logs.
 - Confirm the negotiating state exposes only the spinner and literal status, with no agent content or intermediate price.
+- Confirm no negotiation round count or internal retry count appears.
 - Confirm Observer stops at `OPEN` in the negotiating-state preview.
 - Confirm success is the only path that reveals an agreed amount and failure reveals none.
+- Confirm wallet addresses, transaction hashes, and block numbers do not appear.
 - Confirm prose is Korean except for real role and protocol identifiers.
 - Confirm all semantic text colors meet WCAG AA against `#151515`.
 - Confirm gradients, glow, glassmorphism, traffic-light dots, marketing copy, KPI cards, and charts are absent.

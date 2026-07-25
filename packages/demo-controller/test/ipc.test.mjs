@@ -34,6 +34,49 @@ test("scopes identical product codes to one browser demo instance", () => {
   assert.notEqual(first, second);
 });
 
+test("does not emit a peer waiting log when the other party is already in the room", async () => {
+  const controller = new IsolatedRuntimeController();
+  const events = [];
+  const unsubscribe = controller.onDemoEvent((event) => events.push(event));
+
+  try {
+    await controller.start();
+    controller.joinRoom("buyer", {
+      sessionId: "room-4812",
+      productCode: "4812",
+    });
+    await waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" && event.messageCode === "WAITING_SELLER",
+    );
+
+    const sellerSeesBuyer = waitFor(
+      controller,
+      (event) =>
+        event.panel === "seller" && event.messageCode === "BUYER_JOINED",
+    );
+    controller.joinRoom("seller", {
+      sessionId: "room-4812",
+      productCode: "4812",
+    });
+    await sellerSeesBuyer;
+
+    assert.equal(
+      events.some(
+        (event) =>
+          event.sessionId === "room-4812" &&
+          event.panel === "seller" &&
+          event.messageCode === "WAITING_BUYER",
+      ),
+      false,
+    );
+  } finally {
+    unsubscribe();
+    await controller.shutdown();
+  }
+});
+
 test("streams the private negotiation flow from three isolated runtimes", async () => {
   const controller = new IsolatedRuntimeController();
   const events = [];

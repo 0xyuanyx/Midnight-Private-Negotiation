@@ -471,17 +471,24 @@ export class IsolatedRuntimeController {
         productCode: event.productCode,
       });
       this.#commitmentSessions.delete(role);
-      this.#emit(
-        createDemoEvent({
-          panel: role,
-          sessionId: event.sessionId,
-          state: "WAITING_PEER",
-          messageCode:
-            role === "buyer" ? "WAITING_SELLER" : "WAITING_BUYER",
-          audience: "ROLE_LOCAL",
-          replaceKey: `${role}-peer-entry`,
-        }),
-      );
+      const peer = role === "buyer" ? "seller" : "buyer";
+      const peerRoom = this.#partyRooms.get(peer);
+      const peerAlreadyJoined =
+        peerRoom?.sessionId === event.sessionId &&
+        peerRoom.productCode === event.productCode;
+      if (!peerAlreadyJoined) {
+        this.#emit(
+          createDemoEvent({
+            panel: role,
+            sessionId: event.sessionId,
+            state: "WAITING_PEER",
+            messageCode:
+              role === "buyer" ? "WAITING_SELLER" : "WAITING_BUYER",
+            audience: "ROLE_LOCAL",
+            replaceKey: `${role}-peer-entry`,
+          }),
+        );
+      }
       this.#tryMatchRoom(event.sessionId);
       return;
     }

@@ -48,11 +48,13 @@ Midnight 공식 사이트의 어두운 바탕과 선명한 블루를 가져오�
 | Border | `#343434` | 공식 15% 흰색 경계에 대응하는 1px 선 |
 | Accent | `#0000FE` | 공식 Midnight 포인트 컬러, 작은 강조에만 사용 |
 | Protocol | `#9A9AFF` | 프로토콜 동작·현재 단계 텍스트 |
-| Private | `#D0B36C` | Buyer·Seller 비공개 입력 라벨 |
+| Private | `#D0B36C` | 비공개 입력 라벨과 `비공개 상태`·`비공개 협상`·`금액 비공개` 토큰 |
 | Danger | `#D65C5C` | `결렬`, `CANCELLED`, 오류 식별자 |
 | Success | `#9FB8A3` | Observer의 `SETTLED · 최종 금액` 한 줄 |
+| Buyer Heading | `#A9C2E6` | `BUYER` 헤더 텍스트에만 사용 |
+| Seller Heading | `#D6B879` | `SELLER` 헤더 텍스트에만 사용 |
 
-`#0000FE`의 높은 채도는 사용자 지시에 따른 브랜드 예외다. 넓은 면적, 패널 배경, 그래디언트, 글로우에는 사용하지 않는다. 색은 문장 전체가 아니라 의미 토큰에만 적용한다. `commitment`, `OPEN`, `AUTHORIZED`만 Protocol 색으로 표시하고, `결렬`·`CANCELLED`는 Danger, `합의`·`SETTLED`와 최종 공개 금액은 Success로 표시한다. Success의 가장 강한 사용 지점은 Observer의 최종 공개 한 줄이다.
+`#0000FE`의 높은 채도는 사용자 지시에 따른 브랜드 예외다. 넓은 면적, 패널 배경, 그래디언트, 글로우에는 사용하지 않는다. 역할 구분색은 `BUYER`와 `SELLER` 헤더 텍스트에만 적용하고 Observer는 흰색을 유지한다. 로그에서는 문장 전체가 아니라 의미 토큰에만 색을 적용한다. `OPEN`, `AUTHORIZED`, 증명은 Protocol, `비공개 상태`·`비공개 협상`·`금액 비공개`는 Private, `결렬`·`CANCELLED`는 Danger, `합의`·`SETTLED`와 최종 공개 금액은 Success로 표시한다.
 
 ## 3. Typography Rules
 

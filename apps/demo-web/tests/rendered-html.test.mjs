@@ -53,14 +53,9 @@ test("connects the DApp event stream without browser-generated mock logs", async
 
   assert.match(types, /type ServerMessage/);
   assert.match(dappSource, /new WebSocket/);
-  assert.match(dappSource, /AI 에이전트가 비공개 협상을 진행하고 있습니다/);
-  assert.match(dappSource, /모든 조건을 공개하지 않고 증명하고 있습니다/);
-  assert.match(dappSource, /합의 금액을 온체인에 기록하고 있습니다/);
-  assert.match(dappSource, /판매자 commitment 등록을 기다리고 있습니다/);
-  assert.match(dappSource, /구매자 commitment 등록을 기다리고 있습니다/);
-  assert.match(dappSource, /NEGOTIATION_START/);
-  assert.match(dappSource, /협상을 시작합니다/);
-  assert.match(dappSource, /협상 결과를 온체인에 반영하고 있습니다/);
+  assert.match(dappSource, /messageFor/);
+  assert.match(dappSource, /semanticTokens/);
+  assert.match(dappSource, /observerStatusLabel/);
   assert.match(
     dappSource,
     /const spinningMessages[\s\S]*"NEGOTIATION_START"[\s\S]*"NEGOTIATING"/,
@@ -68,7 +63,6 @@ test("connects the DApp event stream without browser-generated mock logs", async
   assert.match(dappSource, /`\$\{event\.panel\}:\$\{event\.eventId\}`/);
   assert.match(dappSource, /latestEventByReplaceKey/);
   assert.doesNotMatch(dappSource, /current\.slice\(0, index\)/);
-  assert.match(dappSource, /token-danger/);
   assert.match(globalCss, /\.token-danger[\s\S]*var\(--danger\)/);
   assert.doesNotMatch(dappSource, /createDeal을 실행했습니다/);
   assert.doesNotMatch(dappSource, /joinDeal을 실행했습니다/);
@@ -98,4 +92,40 @@ test("connects the DApp event stream without browser-generated mock logs", async
   await access(new URL("../public/fonts/Outfit-OFL.txt", import.meta.url));
   await access(new URL("../.openai/hosting.json", import.meta.url));
   await access(projectRoot);
+});
+
+test("gives Safari semantic numeric input purposes instead of ambiguous autofill", async () => {
+  const dappSource = await readFile(
+    new URL("../app/NegotiationDapp.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    dappSource,
+    /autoComplete=\{isCode \? "one-time-code" : "transaction-amount"\}/,
+  );
+  assert.doesNotMatch(dappSource, /autoComplete="off"/);
+});
+
+test("distinguishes only the Buyer and Seller headings with restrained role colors", async () => {
+  const response = await render();
+  const html = await response.text();
+  const globalCss = await readFile(
+    new URL("../app/globals.css", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(html, /terminal-panel panel-buyer/);
+  assert.match(html, /terminal-panel panel-seller/);
+  assert.match(html, /terminal-panel panel-observer/);
+  assert.match(globalCss, /--buyer-role:\s*#a9c2e6/);
+  assert.match(globalCss, /--seller-role:\s*#d6b879/);
+  assert.match(
+    globalCss,
+    /\.panel-buyer \.panel-header h2\s*\{[^}]*color:\s*var\(--buyer-role\)/s,
+  );
+  assert.match(
+    globalCss,
+    /\.panel-seller \.panel-header h2\s*\{[^}]*color:\s*var\(--seller-role\)/s,
+  );
 });

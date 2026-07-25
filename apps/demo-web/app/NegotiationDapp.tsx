@@ -14,11 +14,15 @@ import {
 } from "react";
 import {
   type DemoEvent,
-  type MessageCode,
   type PanelId,
   type RoleId,
   type ServerMessage,
 } from "./demo-types";
+import {
+  messageFor,
+  observerStatusLabel,
+  semanticTokens,
+} from "./log-presentation";
 
 type EntryPhase = "code" | "limit" | "locked";
 
@@ -42,54 +46,7 @@ const initialEntry = (promptedAt: string): RoleEntry => ({
   promptedAt,
 });
 
-const messages: Partial<Record<MessageCode, (event: DemoEvent) => string>> = {
-  ROOM_JOINED: (event) =>
-    `상품 코드 ${event.productCode ?? ""} 협상방에 입장했습니다.`,
-  WAITING_SELLER: () => "판매자의 거래 참여를 기다리고 있습니다.",
-  WAITING_BUYER: () => "구매자의 거래 참여를 기다리고 있습니다.",
-  SELLER_JOINED: () => "판매자가 거래에 참여했습니다.",
-  BUYER_JOINED: () => "구매자가 거래에 참여했습니다.",
-  BUYER_LIMIT_LOCKED: () =>
-    "구매자 조건을 로컬 비공개 상태에 저장했습니다.",
-  SELLER_LIMIT_LOCKED: () =>
-    "판매자 조건을 로컬 비공개 상태에 저장했습니다.",
-  BUYER_COMMITMENT_CREATED: () => "구매자 commitment를 생성했습니다.",
-  SELLER_COMMITMENT_CREATED: () => "판매자 commitment를 생성했습니다.",
-  WAITING_SELLER_COMMITMENT: () =>
-    "판매자 commitment 등록을 기다리고 있습니다.",
-  WAITING_BUYER_COMMITMENT: () =>
-    "구매자 commitment 등록을 기다리고 있습니다.",
-  SELLER_COMMITMENT_REGISTERED: () =>
-    "판매자 commitment가 등록되었습니다.",
-  BUYER_COMMITMENT_REGISTERED: () =>
-    "구매자 commitment가 등록되었습니다.",
-  OBSERVER_OPEN: () => "OPEN",
-  NEGOTIATION_START: () => "협상을 시작합니다.",
-  NEGOTIATING: () => "AI 에이전트가 비공개 협상을 진행하고 있습니다.",
-  NEGOTIATION_COMPLETE: () =>
-    "AI 에이전트의 비공개 협상이 완료되었습니다.",
-  VERIFYING: () => "모든 조건을 공개하지 않고 증명하고 있습니다.",
-  FINALIZING_SETTLEMENT: () =>
-    "합의 금액을 온체인에 기록하고 있습니다.",
-  FINALIZING_CANCELLATION: () =>
-    "협상 결과를 온체인에 반영하고 있습니다.",
-  PROOFS_COMPLETE: () => "모든 조건 증명이 완료되었습니다.",
-  NEGOTIATION_SETTLED: (event) =>
-    `협상 결과 · 합의 · ${Number(event.agreedAmount ?? 0).toLocaleString("ko-KR")} KRW`,
-  ONCHAIN_RECORDED: () => "합의 금액이 온체인에 기록되었습니다.",
-  OBSERVER_AUTHORIZED: () =>
-    "AUTHORIZED · 가격 commitment 등록됨 · 금액 비공개",
-  OBSERVER_SETTLED: (event) =>
-    `SETTLED · ${Number(event.publicAmount ?? 0).toLocaleString("ko-KR")} KRW`,
-  NEGOTIATION_CANCELLED: () => "협상 결과 · 결렬",
-  OBSERVER_CANCELLED: () => "CANCELLED · 공개된 금액 없음",
-  CHAIN_OPERATION_FAILED: () => "Midnight 거래를 완료하지 못했습니다.",
-  RELAY_CHANNEL_ERROR: () => "협상 연결을 확인할 수 없습니다.",
-  INVALID_RUNTIME_COMMAND: () => "DApp 명령을 처리하지 못했습니다.",
-  RUNTIME_STOPPED: () => "런타임이 종료되었습니다.",
-};
-
-const spinningMessages = new Set<MessageCode>([
+const spinningMessages = new Set<DemoEvent["messageCode"]>([
   "WAITING_SELLER",
   "WAITING_BUYER",
   "WAITING_SELLER_COMMITMENT",
@@ -123,36 +80,17 @@ function SpinnerGlyph() {
 }
 
 function SemanticMessage({ text }: { text: string }) {
-  const parts = text.split(
-    /(commitment|OPEN|AUTHORIZED|SETTLED|CANCELLED|결렬|합의 · [\d,]+ KRW)/g,
-  );
-
   return (
     <>
-      {parts.map((part, index) => {
-        if (/^(commitment|OPEN|AUTHORIZED)$/.test(part)) {
-          return (
-            <span className="token-protocol" key={`${part}-${index}`}>
-              {part}
-            </span>
-          );
-        }
-        if (/^(SETTLED|합의 · [\d,]+ KRW)$/.test(part)) {
-          return (
-            <span className="token-success" key={`${part}-${index}`}>
-              {part}
-            </span>
-          );
-        }
-        if (/^(CANCELLED|결렬)$/.test(part)) {
-          return (
-            <span className="token-danger" key={`${part}-${index}`}>
-              {part}
-            </span>
-          );
-        }
-        return part;
-      })}
+      {semanticTokens(text).map(({ text: token, tone }, index) =>
+        tone === "default" ? (
+          token
+        ) : (
+          <span className={`token-${tone}`} key={`${token}-${index}`}>
+            {token}
+          </span>
+        ),
+      )}
     </>
   );
 }
@@ -165,9 +103,7 @@ function LogLine({
   isActive: boolean;
 }) {
   const reducedMotion = useReducedMotion();
-  const message = messages[event.messageCode]?.(event) ?? "";
-  const isFinalPublicState =
-    event.panel === "observer" && event.messageCode === "OBSERVER_SETTLED";
+  const message = messageFor(event);
 
   return (
     <motion.li
@@ -180,14 +116,8 @@ function LogLine({
       <time dateTime={event.occurredAt} className="terminal-time">
         [{timeLabel(event.occurredAt)}]
       </time>
-      <span
-        className={`terminal-message ${isFinalPublicState ? "tone-success" : ""}`}
-      >
-        {isFinalPublicState ? (
-          message
-        ) : (
-          <SemanticMessage text={message} />
-        )}
+      <span className="terminal-message">
+        <SemanticMessage text={message} />
         {spinningMessages.has(event.messageCode) && isActive ? (
           <SpinnerGlyph />
         ) : null}
@@ -240,16 +170,7 @@ function RoleStatus({ role, entry }: { role: RoleId; entry: RoleEntry }) {
 
 function ObserverStatus({ events }: { events: DemoEvent[] }) {
   const lastState = events.at(-1)?.state;
-  const label =
-    lastState === "SETTLED"
-      ? "SETTLED"
-      : lastState === "AUTHORIZED"
-        ? "AUTHORIZED"
-        : lastState === "OPEN"
-          ? "OPEN"
-          : lastState === "CANCELLED"
-            ? "CANCELLED"
-            : "대기 중";
+  const label = observerStatusLabel(lastState);
 
   return (
     <div className="status-line">
@@ -257,14 +178,8 @@ function ObserverStatus({ events }: { events: DemoEvent[] }) {
       <span className="control-separator" aria-hidden="true">
         ·
       </span>
-      <span
-        className={
-          lastState === "OPEN" || lastState === "AUTHORIZED"
-            ? "observer-state token-protocol"
-            : "observer-state"
-        }
-      >
-        {label}
+      <span className="observer-state">
+        <SemanticMessage text={label} />
       </span>
     </div>
   );
@@ -333,7 +248,7 @@ function EntryPrompt({
             className={`prompt-input ${isCode ? "code-input" : "amount-input"}`}
             type="text"
             inputMode="numeric"
-            autoComplete="off"
+            autoComplete={isCode ? "one-time-code" : "transaction-amount"}
             disabled={entry.pending}
             maxLength={isCode ? 4 : undefined}
             value={isCode ? entry.code : formatAmount(entry.amountInput)}
@@ -404,7 +319,10 @@ function TerminalPanel({
           : "idle";
 
   return (
-    <section className="terminal-panel" aria-labelledby={`${panel}-heading`}>
+    <section
+      className={`terminal-panel panel-${panel}`}
+      aria-labelledby={`${panel}-heading`}
+    >
       <header className="panel-header">
         <h2 id={`${panel}-heading`}>{title}</h2>
         <span className={`status-dot status-${status}`} aria-hidden="true" />
@@ -425,7 +343,7 @@ function TerminalPanel({
         <ol className="terminal-log" aria-live="polite" aria-atomic="false">
           <AnimatePresence initial={false}>
             {events.map((event) =>
-              messages[event.messageCode] === undefined ? null : (
+              messageFor(event).length === 0 ? null : (
                 <LogLine
                   event={event}
                   isActive={
