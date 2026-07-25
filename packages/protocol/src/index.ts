@@ -8,13 +8,18 @@ export type PartyRole = Exclude<Role, "observer">;
 
 export const demoStates = [
   "ROOM_JOINED",
+  "PEER_JOINED",
   "LIMIT_LOCKED",
   "WAITING_PEER",
   "PEER_READY",
-  "COMMITTING",
+  "COMMITMENT_CREATED",
+  "PEER_COMMITMENT_REGISTERED",
+  "OPEN",
   "NEGOTIATING",
-  "BUYER_VERIFYING",
-  "SELLER_VERIFYING",
+  "NEGOTIATION_COMPLETE",
+  "VERIFYING",
+  "PROOFS_COMPLETE",
+  "AGREED",
   "AUTHORIZED",
   "SETTLED",
   "CANCELLED",
@@ -68,6 +73,35 @@ export type PeerReadyCommand = {
   sessionId: string;
 };
 
+export type ChainFundedCommand = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  type: "CHAIN_FUNDED";
+  requestId: string;
+  target: PartyRole;
+};
+
+export type ObserveChainStateCommand = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  type: "OBSERVE_CHAIN_STATE";
+  requestId: string;
+  target: "observer";
+  sessionId: string;
+  contractAddress: string;
+  expectedState: "OPEN" | "AUTHORIZED" | "SETTLED" | "CANCELLED";
+};
+
+export type PublishPublicStateCommand = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  type: "PUBLISH_PUBLIC_STATE";
+  requestId: string;
+  target: "observer";
+  sessionId: string;
+  state: "OPEN" | "AUTHORIZED" | "SETTLED" | "CANCELLED";
+  messageCode: string;
+  occurredAt: string;
+  publicAmount?: string;
+};
+
 export type ShutdownRuntimeCommand = {
   protocolVersion: typeof PROTOCOL_VERSION;
   type: "SHUTDOWN_RUNTIME";
@@ -80,6 +114,9 @@ export type RuntimeCommand =
   | SetLimitCommand
   | ConfigureObserverCommand
   | PeerReadyCommand
+  | ChainFundedCommand
+  | ObserveChainStateCommand
+  | PublishPublicStateCommand
   | StartRuntimeCommand
   | ShutdownRuntimeCommand;
 
@@ -93,6 +130,9 @@ export type DemoEvent = {
   messageCode: string;
   audience: EventAudience;
   productCode?: string;
+  correlationId?: string;
+  replaceKey?: string;
+  agreedAmount?: string;
   publicAmount?: string;
 };
 
@@ -103,13 +143,67 @@ export type RuntimeReadyMessage = {
   pid: number;
 };
 
+export type RuntimeBootFailedMessage = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  type: "RUNTIME_BOOT_FAILED";
+  role: PartyRole;
+  reason: string;
+};
+
 export type RuntimeEventMessage = {
   protocolVersion: typeof PROTOCOL_VERSION;
   type: "DEMO_EVENT";
   event: DemoEvent;
 };
 
-export type RuntimeMessage = RuntimeReadyMessage | RuntimeEventMessage;
+export type RelayChannelReadyMessage = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  type: "RELAY_CHANNEL_READY";
+  role: PartyRole;
+  sessionId: string;
+};
+
+export type ChainWalletReadyMessage = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  type: "CHAIN_WALLET_READY";
+  role: PartyRole;
+  walletAddress: string;
+};
+
+export type ChainTxConfirmedMessage = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  type: "CHAIN_TX_CONFIRMED";
+  role: PartyRole;
+  sessionId: string;
+  contractAddress: string;
+  state: "WAITING_SELLER" | "OPEN" | "AUTHORIZED" | "SETTLED" | "CANCELLED";
+};
+
+export type NegotiationOutcomeMessage =
+  | {
+      protocolVersion: typeof PROTOCOL_VERSION;
+      type: "NEGOTIATION_OUTCOME";
+      role: "buyer";
+      sessionId: string;
+      result: "SETTLED";
+      agreedAmount: string;
+    }
+  | {
+      protocolVersion: typeof PROTOCOL_VERSION;
+      type: "NEGOTIATION_OUTCOME";
+      role: "buyer";
+      sessionId: string;
+      result: "CANCELLED";
+    };
+
+export type RuntimeMessage =
+  | RuntimeReadyMessage
+  | RuntimeBootFailedMessage
+  | RuntimeEventMessage
+  | RelayChannelReadyMessage
+  | ChainWalletReadyMessage
+  | ChainTxConfirmedMessage
+  | NegotiationOutcomeMessage;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -155,6 +249,12 @@ const isIsoDate = (value: unknown): value is string =>
 
 const isMessageCode = (value: unknown): value is string =>
   typeof value === "string" && /^[A-Z][A-Z0-9_]{1,63}$/.test(value);
+
+const isChainAddress = (value: unknown): value is string =>
+  typeof value === "string" &&
+  value.length >= 16 &&
+  value.length <= 256 &&
+  /^[a-z0-9_]+$/u.test(value);
 
 export const parseRuntimeCommand = (value: unknown, expectedRole?: Role): RuntimeCommand => {
   if (!isRecord(value) || value.protocolVersion !== PROTOCOL_VERSION || !isNonEmptyString(value.type)) {
@@ -237,6 +337,76 @@ export const parseRuntimeCommand = (value: unknown, expectedRole?: Role): Runtim
       }
       command = value as PeerReadyCommand;
       break;
+    case "CHAIN_FUNDED":
+      if (
+        !hasExactKeys(value, [
+          "protocolVersion",
+          "type",
+          "requestId",
+          "target",
+        ]) ||
+        !isIdentifier(value.requestId) ||
+        !isPartyRole(value.target)
+      ) {
+        throw new Error("invalid chain funded command");
+      }
+      command = value as ChainFundedCommand;
+      break;
+    case "OBSERVE_CHAIN_STATE":
+      if (
+        !hasExactKeys(value, [
+          "protocolVersion",
+          "type",
+          "requestId",
+          "target",
+          "sessionId",
+          "contractAddress",
+          "expectedState",
+        ]) ||
+        !isIdentifier(value.requestId) ||
+        value.target !== "observer" ||
+        !isIdentifier(value.sessionId) ||
+        !isChainAddress(value.contractAddress) ||
+        !["OPEN", "AUTHORIZED", "SETTLED", "CANCELLED"].includes(
+          value.expectedState as string,
+        )
+      ) {
+        throw new Error("invalid chain observation command");
+      }
+      command = value as ObserveChainStateCommand;
+      break;
+    case "PUBLISH_PUBLIC_STATE":
+      if (
+        !hasExactKeys(
+          value,
+          [
+            "protocolVersion",
+            "type",
+            "requestId",
+            "target",
+            "sessionId",
+            "state",
+            "messageCode",
+            "occurredAt",
+          ],
+          ["publicAmount"],
+        ) ||
+        !isIdentifier(value.requestId) ||
+        value.target !== "observer" ||
+        !isIdentifier(value.sessionId) ||
+        !["OPEN", "AUTHORIZED", "SETTLED", "CANCELLED"].includes(
+          value.state as string,
+        ) ||
+        !isMessageCode(value.messageCode) ||
+        !isIsoDate(value.occurredAt) ||
+        (value.publicAmount !== undefined &&
+          (!isKrwAmount(value.publicAmount) || value.state !== "SETTLED")) ||
+        (value.state === "SETTLED" && value.publicAmount === undefined)
+      ) {
+        throw new Error("invalid public state command");
+      }
+      command = value as PublishPublicStateCommand;
+      break;
     case "START_RUNTIME":
     case "SHUTDOWN_RUNTIME":
       if (
@@ -273,7 +443,13 @@ export const parseDemoEvent = (value: unknown): DemoEvent => {
         "messageCode",
         "audience",
       ],
-      ["productCode", "publicAmount"],
+      [
+        "productCode",
+        "correlationId",
+        "replaceKey",
+        "agreedAmount",
+        "publicAmount",
+      ],
     ) ||
     value.protocolVersion !== PROTOCOL_VERSION ||
     !isIdentifier(value.eventId) ||
@@ -291,6 +467,24 @@ export const parseDemoEvent = (value: unknown): DemoEvent => {
   }
   if (value.productCode !== undefined && value.state !== "ROOM_JOINED") {
     throw new Error("product code is only allowed for room events");
+  }
+  if (
+    value.correlationId !== undefined &&
+    !isIdentifier(value.correlationId)
+  ) {
+    throw new Error("invalid event correlation identifier");
+  }
+  if (value.replaceKey !== undefined && !isIdentifier(value.replaceKey)) {
+    throw new Error("invalid event replacement key");
+  }
+  if (
+    value.agreedAmount !== undefined &&
+    (!isKrwAmount(value.agreedAmount) ||
+      value.state !== "AGREED" ||
+      value.audience !== "PARTICIPANTS" ||
+      value.panel === "observer")
+  ) {
+    throw new Error("agreed amount is only allowed for participant agreement events");
   }
   if (value.publicAmount !== undefined && (!isKrwAmount(value.publicAmount) || value.state !== "SETTLED")) {
     throw new Error("public amount is only allowed for settled events");
@@ -320,6 +514,16 @@ export const parseRuntimeMessage = (value: unknown): RuntimeMessage => {
     }
     return value as RuntimeReadyMessage;
   }
+  if (value.type === "RUNTIME_BOOT_FAILED") {
+    if (
+      !hasExactKeys(value, ["protocolVersion", "type", "role", "reason"]) ||
+      !isPartyRole(value.role) ||
+      !isNonEmptyString(value.reason)
+    ) {
+      throw new Error("invalid runtime boot failure message");
+    }
+    return value as RuntimeBootFailedMessage;
+  }
   if (value.type === "DEMO_EVENT") {
     if (!hasExactKeys(value, ["protocolVersion", "type", "event"])) {
       throw new Error("invalid runtime event message");
@@ -330,17 +534,98 @@ export const parseRuntimeMessage = (value: unknown): RuntimeMessage => {
       event: parseDemoEvent(value.event),
     };
   }
+  if (value.type === "RELAY_CHANNEL_READY") {
+    if (
+      !hasExactKeys(value, [
+        "protocolVersion",
+        "type",
+        "role",
+        "sessionId",
+      ]) ||
+      !isPartyRole(value.role) ||
+      !isIdentifier(value.sessionId)
+    ) {
+      throw new Error("invalid relay channel ready message");
+    }
+    return value as RelayChannelReadyMessage;
+  }
+  if (value.type === "CHAIN_WALLET_READY") {
+    if (
+      !hasExactKeys(value, [
+        "protocolVersion",
+        "type",
+        "role",
+        "walletAddress",
+      ]) ||
+      !isPartyRole(value.role) ||
+      !isChainAddress(value.walletAddress)
+    ) {
+      throw new Error("invalid chain wallet ready message");
+    }
+    return value as ChainWalletReadyMessage;
+  }
+  if (value.type === "CHAIN_TX_CONFIRMED") {
+    if (
+      !hasExactKeys(value, [
+        "protocolVersion",
+        "type",
+        "role",
+        "sessionId",
+        "contractAddress",
+        "state",
+      ]) ||
+      !isPartyRole(value.role) ||
+      !isIdentifier(value.sessionId) ||
+      !isChainAddress(value.contractAddress) ||
+      !["WAITING_SELLER", "OPEN", "AUTHORIZED", "SETTLED", "CANCELLED"].includes(
+        value.state as string,
+      )
+    ) {
+      throw new Error("invalid chain transaction message");
+    }
+    return value as ChainTxConfirmedMessage;
+  }
+  if (value.type === "NEGOTIATION_OUTCOME") {
+    if (
+      !hasExactKeys(
+        value,
+        [
+          "protocolVersion",
+          "type",
+          "role",
+          "sessionId",
+          "result",
+        ],
+        ["agreedAmount"],
+      ) ||
+      value.role !== "buyer" ||
+      !isIdentifier(value.sessionId) ||
+      (value.result !== "SETTLED" && value.result !== "CANCELLED") ||
+      (value.result === "SETTLED" && !isKrwAmount(value.agreedAmount)) ||
+      (value.result === "CANCELLED" && value.agreedAmount !== undefined)
+    ) {
+      throw new Error("invalid negotiation outcome message");
+    }
+    return value as NegotiationOutcomeMessage;
+  }
   throw new Error("unknown runtime message");
 };
 
 export const createDemoEvent = (
-  input: Omit<DemoEvent, "protocolVersion" | "eventId" | "occurredAt">,
-): DemoEvent =>
-  parseDemoEvent({
+  input: Omit<DemoEvent, "protocolVersion" | "eventId" | "occurredAt"> &
+    Partial<Pick<DemoEvent, "eventId" | "occurredAt">>,
+): DemoEvent => {
+  const {
+    eventId = randomUUID(),
+    occurredAt = new Date().toISOString(),
+    ...event
+  } = input;
+  return parseDemoEvent({
     protocolVersion: PROTOCOL_VERSION,
-    eventId: randomUUID(),
-    occurredAt: new Date().toISOString(),
-    ...input,
+    eventId,
+    occurredAt,
+    ...event,
   });
+};
 
 export const createRequestId = (): string => randomUUID();

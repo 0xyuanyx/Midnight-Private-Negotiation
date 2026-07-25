@@ -1,0 +1,22 @@
+{
+  "name": "@midnight-negotiation/negotiation-contract",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "compact": "compact compile src/negotiation.compact src/managed/negotiation",
+    "sync-assets": "mkdir -p dist/managed && cp -R src/managed/negotiation dist/managed/",
+    "build": "npm run compact && tsc -b && npm run sync-assets"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.15.0"
+  }
+}

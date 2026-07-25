@@ -7,10 +7,15 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b",
+    "build": "tsc -b && npm run sync-assets --workspace @midnight-negotiation/negotiation-contract",
     "clean": "tsc -b --clean",
+    "contract:compile": "npm run compact --workspace @midnight-negotiation/negotiation-contract",
+    "demo:controller": "npm run build && node packages/demo-controller/dist/server.js",
+    "demo:midnight": "MIDNIGHT_MODE=local npm run demo:controller",
+    "midnight:up": "docker compose -f infra/midnight-local.yml up -d --wait",
+    "midnight:down": "docker compose -f infra/midnight-local.yml down",
     "typecheck": "tsc -b --pretty false",
-    "test": "npm run build && node --test packages/protocol/test/*.test.mjs packages/demo-controller/test/*.test.mjs"
+    "test": "npm run build && node --test packages/agent-core/test/*.test.mjs packages/protocol/test/*.test.mjs packages/negotiation-contract/test/*.test.mjs packages/room-relay/test/*.test.mjs packages/demo-controller/test/*.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -18,5 +23,8 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "overrides": {
+    "smoldot": "npm:@aspect-build/empty@0.0.0"
   }
 }

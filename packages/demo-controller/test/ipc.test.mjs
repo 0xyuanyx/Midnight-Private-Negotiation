@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { IsolatedRuntimeController } from "../dist/index.js";
 
-const waitFor = (controller, predicate, timeoutMs = 2_000) =>
+const waitFor = (controller, predicate, timeoutMs = 7_000) =>
   new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       unsubscribe();
@@ -16,7 +17,7 @@ const waitFor = (controller, predicate, timeoutMs = 2_000) =>
     });
   });
 
-test("runs Buyer, Seller, and Observer in isolated processes and exchanges sanitized events", async () => {
+test("streams the private negotiation flow from three isolated runtimes", async () => {
   const controller = new IsolatedRuntimeController();
   const events = [];
   const unsubscribe = controller.onDemoEvent((event) => events.push(event));
@@ -29,82 +30,187 @@ test("runs Buyer, Seller, and Observer in isolated processes and exchanges sanit
     );
     assert.equal(new Set(identities.map(({ pid }) => pid)).size, 3);
     assert.ok(identities.every(({ pid }) => pid !== process.pid));
+    const relayIdentity = controller.getRelayIdentity();
+    assert.notEqual(relayIdentity.pid, process.pid);
+    assert.ok(identities.every(({ pid }) => pid !== relayIdentity.pid));
+    assert.equal(relayIdentity.host, "127.0.0.1");
 
     const buyerJoined = waitFor(
       controller,
       (event) => event.panel === "buyer" && event.state === "ROOM_JOINED",
     );
+    const buyerWaitsForSeller = waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" && event.messageCode === "WAITING_SELLER",
+    );
     controller.joinRoom("buyer", {
-      sessionId: "session-4821",
+      sessionId: "room-4821",
       productCode: "4821",
     });
-    await buyerJoined;
+    await Promise.all([buyerJoined, buyerWaitsForSeller]);
 
     const sellerJoined = waitFor(
       controller,
       (event) => event.panel === "seller" && event.state === "ROOM_JOINED",
     );
-    controller.joinRoom("seller", {
-      sessionId: "session-4821",
-      productCode: "4821",
-    });
-    await sellerJoined;
-
-    const observerJoined = waitFor(
+    const buyerSeesSeller = waitFor(
       controller,
-      (event) => event.panel === "observer" && event.state === "ROOM_JOINED",
+      (event) =>
+        event.panel === "buyer" && event.messageCode === "SELLER_JOINED",
     );
-    controller.configureObserver({
-      sessionId: "session-4821",
+    const sellerSeesBuyer = waitFor(
+      controller,
+      (event) =>
+        event.panel === "seller" && event.messageCode === "BUYER_JOINED",
+    );
+    controller.joinRoom("seller", {
+      sessionId: "room-4821",
       productCode: "4821",
     });
-    await observerJoined;
+    const [, buyerPeerEvent, sellerPeerEvent] = await Promise.all([
+      sellerJoined,
+      buyerSeesSeller,
+      sellerSeesBuyer,
+    ]);
+    assert.equal(buyerPeerEvent.occurredAt, sellerPeerEvent.occurredAt);
+    assert.equal(buyerPeerEvent.correlationId, sellerPeerEvent.correlationId);
 
-    const buyerWaiting = waitFor(
+    const buyerLocked = waitFor(
       controller,
-      (event) => event.panel === "buyer" && event.state === "WAITING_PEER",
+      (event) =>
+        event.panel === "buyer" && event.messageCode === "BUYER_LIMIT_LOCKED",
+    );
+    const buyerCommitment = waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" &&
+        event.messageCode === "BUYER_COMMITMENT_CREATED",
+    );
+    const buyerWaitsForCommitment = waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" &&
+        event.messageCode === "WAITING_SELLER_COMMITMENT",
     );
     controller.setLimit("buyer", {
-      sessionId: "session-4821",
+      sessionId: "room-4821",
       limitKrw: "110000",
     });
-    const buyerWaitingEvent = await buyerWaiting;
-    assert.equal(buyerWaitingEvent.messageCode, "WAITING_FOR_PEER_INPUT");
-    assert.equal(buyerWaitingEvent.audience, "ROLE_LOCAL");
-    assert.equal(events.some((event) => event.state === "PEER_READY"), false);
+    await Promise.all([
+      buyerLocked,
+      buyerCommitment,
+      buyerWaitsForCommitment,
+    ]);
 
-    const sellerWaiting = waitFor(
+    const sellerWaitsForCommitment = waitFor(
       controller,
-      (event) => event.panel === "seller" && event.state === "WAITING_PEER",
+      (event) =>
+        event.panel === "seller" &&
+        event.messageCode === "WAITING_BUYER_COMMITMENT",
     );
-    const buyerPeerReady = waitFor(
+    const buyerPeerCommitment = waitFor(
       controller,
-      (event) => event.panel === "buyer" && event.state === "PEER_READY",
+      (event) =>
+        event.panel === "buyer" &&
+        event.messageCode === "SELLER_COMMITMENT_REGISTERED",
     );
-    const sellerPeerReady = waitFor(
+    const sellerPeerCommitment = waitFor(
       controller,
-      (event) => event.panel === "seller" && event.state === "PEER_READY",
+      (event) =>
+        event.panel === "seller" &&
+        event.messageCode === "BUYER_COMMITMENT_REGISTERED",
     );
-    controller.setLimit("seller", {
-      sessionId: "session-4821",
-      limitKrw: "95000",
-    });
-    await Promise.all([sellerWaiting, buyerPeerReady, sellerPeerReady]);
-
+    const observerOpen = waitFor(
+      controller,
+      (event) =>
+        event.panel === "observer" && event.messageCode === "OBSERVER_OPEN",
+    );
+    const buyerNegotiationStart = waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" &&
+        event.messageCode === "NEGOTIATION_START",
+    );
+    const sellerNegotiationStart = waitFor(
+      controller,
+      (event) =>
+        event.panel === "seller" &&
+        event.messageCode === "NEGOTIATION_START",
+    );
     const buyerNegotiating = waitFor(
       controller,
-      (event) => event.panel === "buyer" && event.state === "NEGOTIATING",
+      (event) =>
+        event.panel === "buyer" && event.messageCode === "NEGOTIATING",
     );
     const sellerNegotiating = waitFor(
       controller,
-      (event) => event.panel === "seller" && event.state === "NEGOTIATING",
+      (event) =>
+        event.panel === "seller" && event.messageCode === "NEGOTIATING",
     );
-    const observerWaiting = waitFor(
+    const observerSettled = waitFor(
       controller,
-      (event) => event.panel === "observer" && event.state === "WAITING_PEER",
+      (event) =>
+        event.panel === "observer" && event.messageCode === "OBSERVER_SETTLED",
     );
-    controller.startNegotiation();
-    await Promise.all([buyerNegotiating, sellerNegotiating, observerWaiting]);
+
+    controller.setLimit("seller", {
+      sessionId: "room-4821",
+      limitKrw: "95000",
+    });
+
+    const [
+      ,
+      buyerCommitmentRegistered,
+      sellerCommitmentRegistered,
+      openEvent,
+      buyerNegotiationStartEvent,
+      sellerNegotiationStartEvent,
+      buyerNegotiatingEvent,
+      sellerNegotiatingEvent,
+      settledEvent,
+    ] = await Promise.all([
+      sellerWaitsForCommitment,
+      buyerPeerCommitment,
+      sellerPeerCommitment,
+      observerOpen,
+      buyerNegotiationStart,
+      sellerNegotiationStart,
+      buyerNegotiating,
+      sellerNegotiating,
+      observerSettled,
+    ]);
+
+    assert.equal(
+      buyerCommitmentRegistered.occurredAt,
+      sellerCommitmentRegistered.occurredAt,
+    );
+    assert.equal(
+      buyerNegotiationStartEvent.occurredAt,
+      sellerNegotiationStartEvent.occurredAt,
+    );
+    assert.equal(
+      buyerNegotiatingEvent.occurredAt,
+      sellerNegotiatingEvent.occurredAt,
+    );
+    assert.ok(
+      Date.parse(buyerNegotiationStartEvent.occurredAt) <
+        Date.parse(buyerNegotiatingEvent.occurredAt),
+    );
+    assert.equal(openEvent.audience, "PUBLIC");
+    assert.equal(settledEvent.publicAmount, "100000");
+
+    const participantAgreement = events.filter(
+      (event) => event.messageCode === "NEGOTIATION_SETTLED",
+    );
+    assert.equal(participantAgreement.length, 2);
+    assert.ok(
+      participantAgreement.every(
+        (event) =>
+          event.agreedAmount === "100000" &&
+          event.audience === "PARTICIPANTS",
+      ),
+    );
 
     const serialized = JSON.stringify(events);
     assert.equal(serialized.includes("110000"), false);
@@ -113,22 +219,93 @@ test("runs Buyer, Seller, and Observer in isolated processes and exchanges sanit
     assert.ok(events.every((event) => event.protocolVersion === 1));
     assert.ok(
       events
-        .filter(
-          (event) =>
-            event.panel !== "observer" &&
-            (event.state === "LIMIT_LOCKED" || event.state === "WAITING_PEER"),
-        )
-        .every((event) => event.audience === "ROLE_LOCAL"),
-    );
-    assert.ok(
-      events
-        .filter((event) => event.state === "PEER_READY" || event.state === "NEGOTIATING")
-        .every((event) => event.audience === "PARTICIPANTS"),
-    );
-    assert.ok(
-      events
         .filter((event) => event.panel === "observer")
-        .every((event) => event.audience === "PUBLIC"),
+        .every(
+          (event) =>
+            event.audience === "PUBLIC" &&
+            !["NEGOTIATING", "VERIFYING"].includes(event.state),
+        ),
+    );
+  } finally {
+    unsubscribe();
+    await controller.shutdown();
+  }
+});
+
+test("keeps relay crypto material out of the Controller and retains no limits", async () => {
+  const source = await readFile(
+    new URL("../dist/orchestrator.js", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal(source.includes("ciphertext"), false);
+  assert.equal(source.includes("authTag"), false);
+  assert.equal(source.includes("peerPublicKey"), false);
+  assert.equal(source.includes("limitKrw"), false);
+  assert.equal(source.includes("buyerMaxPrice"), false);
+  assert.equal(source.includes("sellerMinPrice"), false);
+});
+
+test("skips proof and settlement states when private limits do not overlap", async () => {
+  const controller = new IsolatedRuntimeController();
+  const events = [];
+  const unsubscribe = controller.onDemoEvent((event) => events.push(event));
+
+  try {
+    await controller.start();
+    controller.joinRoom("buyer", {
+      sessionId: "room-7392",
+      productCode: "7392",
+    });
+    controller.joinRoom("seller", {
+      sessionId: "room-7392",
+      productCode: "7392",
+    });
+
+    await waitFor(
+      controller,
+      (event) =>
+        event.panel === "seller" && event.messageCode === "BUYER_JOINED",
+    );
+
+    controller.setLimit("buyer", {
+      sessionId: "room-7392",
+      limitKrw: "90000",
+    });
+    await waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" &&
+        event.messageCode === "WAITING_SELLER_COMMITMENT",
+    );
+
+    const cancelled = waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" &&
+        event.messageCode === "NEGOTIATION_CANCELLED",
+    );
+    controller.setLimit("seller", {
+      sessionId: "room-7392",
+      limitKrw: "100000",
+    });
+    await cancelled;
+
+    assert.equal(
+      events.some((event) =>
+        ["VERIFYING", "PROOFS_COMPLETE", "AUTHORIZED", "SETTLED"].includes(
+          event.state,
+        ),
+      ),
+      false,
+    );
+    assert.equal(
+      events.some(
+        (event) =>
+          event.publicAmount !== undefined ||
+          event.agreedAmount !== undefined,
+      ),
+      false,
     );
   } finally {
     unsubscribe();

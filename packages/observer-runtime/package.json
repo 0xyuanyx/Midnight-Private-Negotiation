@@ -5,6 +5,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "dependencies": {
+    "@midnight-negotiation/midnight-adapter": "2.0.0",
     "@midnight-negotiation/protocol": "2.0.0"
   }
 }

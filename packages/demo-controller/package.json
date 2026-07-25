@@ -12,6 +12,11 @@
     }
   },
   "dependencies": {
-    "@midnight-negotiation/protocol": "2.0.0"
+    "@midnight-negotiation/protocol": "2.0.0",
+    "@midnight-negotiation/room-relay": "2.0.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

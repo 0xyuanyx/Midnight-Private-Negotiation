@@ -2,7 +2,19 @@
   "files": [],
   "references": [
     {
+      "path": "./packages/agent-core"
+    },
+    {
       "path": "./packages/protocol"
+    },
+    {
+      "path": "./packages/negotiation-contract"
+    },
+    {
+      "path": "./packages/midnight-adapter"
+    },
+    {
+      "path": "./packages/room-relay"
     },
     {
       "path": "./packages/buyer-runtime"

@@ -133,7 +133,7 @@ Buyer와 Seller는 각자 자기 패널에서 동일한 4자리 상품 코드를
 - 금액은 양의 정수 KRW이며 표시할 때 천 단위 구분 쉼표를 사용한다.
 - 금액 제출 후 해당 행은 잠긴 읽기 상태가 된다.
 - 한도를 잠근 직후 해당 역할에 `상대방의 입력을 기다리고 있습니다.`를 표시한다.
-- Controller는 한도 금액이 아니라 Buyer·Seller의 `LIMIT_LOCKED` 상태만 확인한다.
+- Controller는 웹에서 받은 한도 명령을 대상 런타임에 즉시 전달하고 원문을 보관·로그하지 않으며, 이후에는 Buyer·Seller의 `LIMIT_LOCKED` 상태만 확인한다.
 - 같은 상품 코드의 두 역할이 모두 `LIMIT_LOCKED`가 되면 양쪽에 `PEER_READY`를 보내 다음 단계로 진행한다.
 - 자물쇠는 “이 역할의 로컬 private state에 저장됨”을 뜻한다.
 - 잠긴 금액은 해당 역할 패널에는 그대로 보인다.
@@ -399,12 +399,15 @@ Relay에는 다음 envelope만 평문으로 보인다.
 
 ```json
 {
-  "version": 1,
-  "roomCode": "4821",
+  "relayProtocolVersion": 1,
+  "sessionId": "room-4821",
+  "productCode": "4821",
   "sender": "buyer",
+  "target": "seller",
   "sequence": 3,
   "nonce": "base64",
-  "ciphertext": "base64"
+  "ciphertext": "base64",
+  "authTag": "base64"
 }
 ```
 
@@ -414,7 +417,7 @@ Relay에는 다음 envelope만 평문으로 보인다.
 - Relay를 통해 임시 공개 키만 교환한다.
 - 공유 비밀에서 HKDF-SHA-256으로 세션 키를 파생한다.
 - 협상 payload는 AES-256-GCM으로 암호화한다.
-- `version`, `roomCode`, `sender`, `sequence`는 AAD로 인증한다.
+- `relayProtocolVersion`, `sessionId`, `productCode`, `sender`, `target`, `sequence`는 AAD로 인증한다.
 - 모든 메시지는 고유한 96비트 nonce와 단조 증가 sequence를 사용한다.
 - 중복 sequence, 재사용 nonce, 인증 태그 실패는 즉시 거부한다.
 
@@ -720,16 +723,16 @@ type DemoEvent = {
 
 ## 23. 개발 착수 상태
 
-프로세스 격리, IPC 이벤트 배선, WebSocket 라우터, 3패널 웹 DApp, GPT mock과 역할별 PolicyGuard 연결까지 구현되었다. GPT API 키가 없어도 암호화된 로컬 결정론적 협상 provider로 성사·결렬 화면을 검증할 수 있다.
+프로세스 격리, IPC 이벤트 배선, WebSocket 라우터, 3패널 웹 DApp, GPT mock과 역할별 PolicyGuard, 독립 Room Relay, Uint64 Compact 계약과 로컬 Midnight 연결까지 구현되었다. GPT API 키가 없어도 암호화된 로컬 결정론적 협상 provider로 성사·결렬 화면을 검증할 수 있다.
 
-현재 구현에는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller, WebSocket, 터미널 입력 UI, 한도를 받지 않는 최대 5개 후보 GPT mock, 역할별 로컬 PolicyGuard, 판정 결과 없는 최대 3회 stateless 재요청, X25519 공유키와 AES-256-GCM 불투명 협상 패킷, 최대 10라운드 협상이 포함된다.
+현재 구현에는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller, WebSocket, 터미널 입력 UI, 한도를 받지 않는 최대 5개 후보 GPT mock, 역할별 로컬 PolicyGuard, 판정 결과 없는 최대 3회 stateless 재요청, Controller를 우회해 Buyer·Seller가 직접 연결하는 독립 Room Relay, X25519와 HKDF-SHA-256 세션 키, 메타데이터 AAD를 사용하는 AES-256-GCM 불투명 협상 패킷, sequence replay·nonce 재사용·방 교차 차단, 최대 10라운드 협상이 포함된다.
+
+로컬 체인 모드에서는 Buyer가 무작위 지갑과 private state로 계약을 배포하고 Seller가 암호화 채널로 받은 계약에 참여한다. Buyer의 `authorizeHiddenPrice`와 Seller의 `settle`은 서로 다른 proof server를 사용한다. Observer 프로세스는 지갑, private state, proof server 구성을 받지 않고 Indexer 공개 상태만 조회한다. Controller는 mock 타이머로 공개 상태를 만들지 않으며 Observer가 Indexer에서 확인한 `OPEN`, `AUTHORIZED`, `SETTLED`만 WebSocket으로 전달한다. 실제 로컬 체인 E2E에서 최종 `100,000 KRW`가 `SETTLED` 이전에는 공개 이벤트에 나타나지 않는 것을 확인했다.
 
 다음 작업 묶음이 남아 있다.
 
 1. 로컬 mock 전체 흐름 녹화 리허설
 2. 필요 시 실제 GPT candidate provider와 `store: false` 요청 어댑터 연결
-3. Uint64 가격을 사용하는 새 Midnight 계약과 Indexer Observer 연결
-4. 실제 Midnight proof·AUTHORIZED·SETTLED 이벤트로 현재 시뮬레이션 어댑터 교체
-5. 오류 E2E 테스트, 프라이버시 감사, 발표 화면 최종 검증
+3. 오류 E2E 테스트, 프라이버시 감사, 발표 화면 최종 검증
 
 현재 화면 흐름은 실제 역할 프로세스와 암호화된 로컬 협상 이벤트를 사용한다. GPT mock과 실제 GPT provider는 동일한 `CandidateProvider` 경계를 사용하므로, 실제 API 연결 시에도 PolicyGuard와 private state는 역할 런타임 내부에 유지한다.

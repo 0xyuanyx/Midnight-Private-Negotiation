@@ -5,6 +5,10 @@
   "type": "module",
   "main": "./dist/index.js",
   "dependencies": {
-    "@midnight-negotiation/protocol": "2.0.0"
+    "@midnight-negotiation/agent-core": "2.0.0",
+    "@midnight-negotiation/midnight-adapter": "2.0.0",
+    "@midnight-negotiation/negotiation-contract": "2.0.0",
+    "@midnight-negotiation/protocol": "2.0.0",
+    "@midnight-negotiation/room-relay": "2.0.0"
   }
 }

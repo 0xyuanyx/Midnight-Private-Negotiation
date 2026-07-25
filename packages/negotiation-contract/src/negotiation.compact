@@ -1,0 +1,147 @@
+pragma language_version >= 0.20;
+
+import CompactStandardLibrary;
+
+export enum DealStatus {
+  WAITING_SELLER,
+  OPEN,
+  AUTHORIZED,
+  SETTLED,
+  CANCELLED
+}
+
+export ledger dealId: Bytes<32>;
+export ledger buyerKey: Bytes<32>;
+export ledger sellerKey: Bytes<32>;
+export ledger buyerCommitment: Bytes<32>;
+export ledger sellerCommitment: Bytes<32>;
+export ledger priceCommitment: Bytes<32>;
+export ledger finalPrice: Uint<64>;
+export ledger status: DealStatus;
+
+witness buyerSecretKey(): Bytes<32>;
+witness sellerSecretKey(): Bytes<32>;
+witness buyerCancelSecretKey(): Bytes<32>;
+witness sellerCancelSecretKey(): Bytes<32>;
+witness buyerMaxPrice(): Uint<64>;
+witness buyerLimitRandomness(): Bytes<32>;
+witness agreedPrice(): Uint<64>;
+witness priceRandomness(): Bytes<32>;
+witness sellerMinPrice(): Uint<64>;
+witness sellerLimitRandomness(): Bytes<32>;
+
+constructor(
+  _dealId: Bytes<32>,
+  _buyerKey: Bytes<32>,
+  _buyerCommitment: Bytes<32>
+) {
+  dealId = disclose(_dealId);
+  buyerKey = disclose(_buyerKey);
+  sellerKey = disclose(pad(32, ""));
+  buyerCommitment = disclose(_buyerCommitment);
+  sellerCommitment = disclose(pad(32, ""));
+  priceCommitment = disclose(pad(32, ""));
+  finalPrice = 0;
+  status = DealStatus.WAITING_SELLER;
+}
+
+export circuit joinDeal(): [] {
+  assert(status == DealStatus.WAITING_SELLER, "deal is not waiting for seller");
+
+  const joinedSellerKey = publicKey(sellerSecretKey());
+  const joinedSellerCommitment = limitCommitment(
+    pad(32, "negotiation:seller:"),
+    joinedSellerKey,
+    sellerMinPrice(),
+    sellerLimitRandomness()
+  );
+
+  sellerKey = disclose(joinedSellerKey);
+  sellerCommitment = disclose(joinedSellerCommitment);
+  status = DealStatus.OPEN;
+}
+
+export circuit authorizeHiddenPrice(): [] {
+  assert(status == DealStatus.OPEN, "deal is not open");
+  assert(publicKey(buyerSecretKey()) == buyerKey, "caller is not buyer");
+
+  const maxPrice = buyerMaxPrice();
+  const limitRandomness = buyerLimitRandomness();
+  const price = agreedPrice();
+  const priceRandomnessValue = priceRandomness();
+
+  assert(
+    limitCommitment(pad(32, "negotiation:buyer:"), buyerKey, maxPrice, limitRandomness) == buyerCommitment,
+    "buyer limit commitment mismatch"
+  );
+  assert(price <= maxPrice, "price exceeds buyer maximum");
+
+  priceCommitment = disclose(priceCommitmentFor(price, priceRandomnessValue));
+  status = DealStatus.AUTHORIZED;
+}
+
+export circuit settle(): [] {
+  assert(status == DealStatus.AUTHORIZED, "deal is not authorized");
+  assert(publicKey(sellerSecretKey()) == sellerKey, "caller is not seller");
+
+  const minPrice = sellerMinPrice();
+  const limitRandomness = sellerLimitRandomness();
+  const price = agreedPrice();
+  const priceRandomnessValue = priceRandomness();
+
+  assert(
+    limitCommitment(pad(32, "negotiation:seller:"), sellerKey, minPrice, limitRandomness) == sellerCommitment,
+    "seller limit commitment mismatch"
+  );
+  assert(
+    priceCommitmentFor(price, priceRandomnessValue) == priceCommitment,
+    "price commitment mismatch"
+  );
+  assert(minPrice <= price, "price is below seller minimum");
+
+  finalPrice = disclose(price);
+  status = DealStatus.SETTLED;
+}
+
+export circuit cancelAsBuyer(): [] {
+  assert(publicKey(buyerCancelSecretKey()) == buyerKey, "caller is not buyer");
+  assert(status != DealStatus.SETTLED, "settled deal cannot be cancelled");
+  status = DealStatus.CANCELLED;
+}
+
+export circuit cancelAsSeller(): [] {
+  assert(publicKey(sellerCancelSecretKey()) == sellerKey, "caller is not seller");
+  assert(status != DealStatus.SETTLED, "settled deal cannot be cancelled");
+  status = DealStatus.CANCELLED;
+}
+
+circuit publicKey(secretKey: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "negotiation:public-key:"),
+    secretKey
+  ]);
+}
+
+circuit limitCommitment(
+  role: Bytes<32>,
+  key: Bytes<32>,
+  limit: Uint<64>,
+  randomness: Bytes<32>
+): Bytes<32> {
+  return persistentHash<Vector<5, Bytes<32>>>([
+    dealId,
+    role,
+    key,
+    limit as Bytes<32>,
+    randomness
+  ]);
+}
+
+circuit priceCommitmentFor(price: Uint<64>, randomness: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([
+    dealId,
+    pad(32, "negotiation:price:"),
+    price as Bytes<32>,
+    randomness
+  ]);
+}
