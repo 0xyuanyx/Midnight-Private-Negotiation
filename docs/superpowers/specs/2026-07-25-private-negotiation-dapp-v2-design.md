@@ -49,6 +49,12 @@ Counter 예제를 기반으로 만든 기존 데모는 `v1/` 아래에 실행 �
 
 `apps/`와 `packages/`는 구현 계획 승인 후 생성한다.
 
+### 현재 v1 구현 기준
+
+- `v1/agents/buyer.ts`와 `v1/agents/seller.ts`를 사용하는 경량 데모·단위 테스트는 한 Node.js 프로세스 안에서 두 객체를 함께 실행한다.
+- 실제 Midnight 통합 경로인 `v1/counter-cli/src/isolation/orchestrator.ts`는 `buyer-runtime.ts`, `seller-runtime.ts`, `observer-runtime.ts`를 각각 `child_process.fork()`로 실행한다.
+- v2는 두 방식 중 후자를 계승한다. Buyer, Seller, Observer는 서로 다른 PID를 가진 별도 프로세스여야 하며, 한 프로세스가 양쪽 private state를 함께 보유하는 구현은 허용하지 않는다.
+
 ## 3. 사용자와 사용 맥락
 
 ### 직접 사용자
@@ -148,14 +154,14 @@ Buyer·Seller가 같은 상품 코드 입력
 ```mermaid
 flowchart LR
     UI["3패널 데모 화면<br/>입력 + 정제된 로그"]
-    DC["Demo Controller<br/>실행 제어 · 화면 이벤트 중계<br/>비밀 입력 수신 안 함"]
+    DC["Demo Controller<br/>데모 전용 신뢰 경계<br/>명령 전달 · 화면 이벤트 중계<br/>한도 저장·로그 안 함"]
 
     UI <--> DC
-    UI -->|"상품 코드 · 구매자 최대 한도"| B
-    UI -->|"상품 코드 · 판매자 최소 금액"| S
 
-    DC <-->|"실행 명령 · 정제된 이벤트"| B
-    DC <-->|"실행 명령 · 정제된 이벤트"| S
+    DC -->|"IPC · 상품 코드 · 구매자 최대 한도"| B
+    DC -->|"IPC · 상품 코드 · 판매자 최소 금액"| S
+    B -->|"IPC · Buyer DemoEvent"| DC
+    S -->|"IPC · Seller DemoEvent"| DC
 
     subgraph BR["Buyer 신뢰 경계 (로컬)"]
       B["Buyer 런타임<br/>상품 코드 · 최대 한도 · 커밋 난수"]
@@ -187,17 +193,45 @@ flowchart LR
 
 ### 8.1 Demo Web
 
-- Buyer와 Seller의 비밀 입력을 각 역할 런타임 전용 채널로 직접 전달한다.
-- Demo Controller에는 비밀 입력을 보내지 않는다.
+- 하나의 WebSocket 연결로 역할이 표시된 명령을 Demo Controller에 전달한다.
+- Buyer와 Seller 입력을 브라우저 저장소, 분석 도구, 콘솔에 기록하지 않는다.
 - 역할 런타임과 Observer가 발행한 정제된 이벤트만 렌더링한다.
 - 협상 원문, GPT 프롬프트, 후보 목록, 폐기 결과를 렌더링하거나 브라우저 로그에 기록하지 않는다.
 
 ### 8.2 Demo Controller
 
+- Buyer, Seller, Observer 런타임을 각각 별도 자식 프로세스로 시작한다.
+- 웹 명령을 대상 역할 프로세스의 IPC로 즉시 전달한다.
 - 역할 런타임 시작·중지·초기화 명령을 전달한다.
-- 역할 런타임에서 이미 정제된 화면 이벤트를 패널로 중계한다.
-- 최대·최소 한도, commitment randomness, 역할 비밀 키를 입력·보관·로그하지 않는다.
+- 각 프로세스의 `DemoEvent`를 검증한 뒤 WebSocket으로 해당 패널에만 중계한다.
+- 최대·최소 한도는 IPC 전달 중 일시적으로 수신하지만 상태, 파일, 로그, 오류 추적 도구에 보관하지 않는다.
+- commitment randomness와 역할 비밀 키는 수신하지 않는다.
+- 역할 프로세스의 raw stdout을 웹으로 중계하지 않는다.
 - 성공 상태는 Seller의 `settle` 호출과 Indexer의 `SETTLED` 확인이 모두 끝난 뒤에만 발행한다.
+
+Demo Controller는 로컬 데모의 신뢰 경계에 포함된다. 따라서 데모가 보장하는 비공개 대상은 상대 역할 런타임, Room Relay, GPT API, 공개 체인이며, Controller로부터도 한도를 숨기는 구조는 프로덕션용 역할별 클라이언트에서 별도로 다룬다.
+
+### 8.2.1 프로세스와 웹 이벤트 배선
+
+```text
+Browser
+  └─ WebSocket command
+       └─ Demo Controller (parent)
+            ├─ child.send(BuyerCommand)  → Buyer Runtime
+            ├─ child.send(SellerCommand) → Seller Runtime
+            └─ child.send(ObserveCommand)→ Observer Runtime
+
+Buyer/Seller/Observer Runtime
+  └─ process.send(DemoEvent)
+       └─ Demo Controller validation
+            └─ WebSocket panel event
+                 └─ Buyer/Seller/Observer panel
+```
+
+- 로그 push 지점은 각 역할 런타임의 `process.send(DemoEvent)`다.
+- WebSocket push 지점은 Demo Controller의 검증된 이벤트 라우터다.
+- 이벤트의 `panel` 값만 신뢰하지 않고, 이벤트를 보낸 자식 프로세스의 고정 역할과 일치하는지 검사한다.
+- 역할 프로세스 종료 시 해당 패널에 정제된 오류 이벤트를 한 번만 발행한다.
 
 ### 8.3 Buyer Runtime
 
@@ -645,3 +679,19 @@ type DemoEvent = {
 - 배포 환경과 CI
 
 이 선택들은 본 문서의 신뢰 경계, 데이터 최소화, 이벤트 계약, 라운드 규칙을 변경해서는 안 된다.
+
+## 23. 개발 착수 상태
+
+프로세스 격리와 웹 이벤트 배선까지 확정되었으므로 구현을 막는 설계 결정은 남아 있지 않다. GPT API 키가 아직 없어도 mock 협상 provider와 결정론적 fallback으로 개발과 화면 검증을 먼저 진행할 수 있다.
+
+v2 구현은 아직 시작하지 않았으며 다음 작업 묶음이 남아 있다.
+
+1. monorepo와 공용 protocol 패키지 생성
+2. Buyer·Seller·Observer 별도 프로세스와 Demo Controller IPC 구현
+3. WebSocket 명령·이벤트 라우터와 3패널 웹 UI 구현
+4. PolicyGuard, 최대 10라운드 협상 엔진, mock·GPT provider 구현
+5. X25519·HKDF·AES-GCM Room Relay 구현
+6. Uint64 가격을 사용하는 새 Midnight 계약과 Indexer Observer 연결
+7. 성공·결렬·오류 E2E 테스트, 프라이버시 감사, 발표 화면 검증
+
+구현 순서는 1–4로 로컬 mock 데모를 먼저 완성한 다음 5–6을 연결하고, 마지막에 7로 전체 경계를 검증한다.

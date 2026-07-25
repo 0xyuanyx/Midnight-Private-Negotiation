@@ -147,7 +147,7 @@ Midnight 공식 사이트의 어두운 바탕과 선명한 블루를 가져오�
 
 ## 7. Motion & Interaction
 
-입력은 역할별 런타임 전용 채널로 제출되며 Demo Controller에는 비밀 입력을 보내지 않는다. 협상 중인 동안에만 작은 터미널 스피너가 순환하고, 완료·오류 시 즉시 정지해 해당 상태 로그로 교체한다. `prefers-reduced-motion`에서는 스피너를 고정 글리프로 표시한다. 실시간 정제 로그의 새 행은 120ms 이내의 opacity 변화만 허용한다.
+입력은 로컬 WebSocket을 통해 데모 전용 신뢰 경계인 Demo Controller로 제출되고, Controller가 대상 역할 프로세스 IPC로 즉시 전달한다. Controller는 한도를 저장하거나 로그에 남기지 않는다. 협상 중인 동안에만 작은 터미널 스피너가 순환하고, 완료·오류 시 즉시 정지해 해당 상태 로그로 교체한다. `prefers-reduced-motion`에서는 스피너를 고정 글리프로 표시한다. 실시간 정제 로그의 새 행은 120ms 이내의 opacity 변화만 허용한다.
 
 ## 8. Responsive Behavior
 

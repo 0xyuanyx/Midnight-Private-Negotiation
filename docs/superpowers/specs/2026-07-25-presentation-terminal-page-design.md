@@ -122,7 +122,7 @@ All prose UI and log messages are Korean. English remains only where it is a rea
 
 ## Data Flow
 
-Buyer and Seller secret inputs go directly to their dedicated role runtime channels. Demo Controller receives lifecycle commands and already-sanitized display events only. Observer receives public contract data through Midnight Indexer and sends sanitized public events to Demo Controller. The page never renders raw role stdout or derives Observer output from private browser inputs.
+Buyer and Seller inputs travel over one local WebSocket to the trusted demo-only Controller, which forwards each command immediately to the matching isolated role process over IPC without storing or logging the limit. Each role process pushes only sanitized `DemoEvent` messages back over IPC; the Controller validates the sender role and routes them to the matching web panel. Observer receives public contract data through Midnight Indexer and sends sanitized public events through the same path. The page never renders raw role stdout or derives Observer output from private browser inputs.
 
 ## Error Handling
 
