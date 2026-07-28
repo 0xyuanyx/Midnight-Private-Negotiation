@@ -296,15 +296,19 @@ Preserve the source two-column and process/timeline layouts. Ensure slide 8 show
 
 Keep the inherited media frame and image object. Do not embed `데모1.mov` through `데모6.mov`. Update the notes to `5,000 / 2,000 / 4,500`.
 
-- [ ] **Step 8: Implement slides 10–12**
+- [ ] **Step 8: Implement slides 10–11**
 
-Create the private-versus-observer reversal, two-column status/roadmap slide, and closing URL. Keep `OPEN`, `AUTHORIZED`, `SETTLED`, and `4,500 KRW` in Outfit.
+Create the private-versus-observer reversal and two-column status/roadmap slide. Keep `OPEN`, `AUTHORIZED`, `SETTLED`, and `4,500 KRW` in Outfit.
 
-- [ ] **Step 9: Implement appendix slides 13–14**
+- [ ] **Step 9: Implement appendix slides 12–13**
 
-Move the Relay content intact to slide 13 with contrast updates. Build slide 14 from the two-row proof relation pattern with the exact commitment-versus-proof copy.
+Move the Relay content intact to slide 12 with contrast updates. Build slide 13 from the two-row proof relation pattern with the exact commitment-versus-proof copy.
 
-- [ ] **Step 10: Export**
+- [ ] **Step 10: Implement closing slide 14**
+
+Move the inherited closing slide to the final position. Recompose it as a centered end card with the official logo, closing statement, semantic summary, and clickable GitHub URL. Remove the ordinary footer and page number so it cannot be mistaken for another opening slide.
+
+- [ ] **Step 11: Export**
 
 Use:
 

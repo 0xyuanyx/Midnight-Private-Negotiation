@@ -253,7 +253,7 @@ Each slide uses at most two saturated semantic colors plus neutral text. The col
 - Bottom: `완성 보고가 아니라, 계속 만들 프로젝트의 첫 공개입니다.`
 - Do not present `36 / 8 / 5` as three equal KPI cards.
 
-### 12. Closing — 20 seconds
+### 14. Closing — 20 seconds
 
 **Source pattern:** source slide 9.
 
@@ -261,10 +261,15 @@ Each slide uses at most two saturated semantic colors plus neutral text. The col
 - Add one neutral line:
   - `github.com/0xyuanyx/Midnight-Private-Negotiation`
 - Keep the URL readable but subordinate to the closing claim.
+- Place the two Q&A appendix slides before the closing so the brand logo and
+  repository link remain on the final slide in the file.
+- Do not reuse the opening slide's left-anchored silhouette. Center the official
+  logo, closing statement, semantic summary, and URL as a restrained end card.
+- Remove the ordinary footer and page number from the closing slide.
 
 ## Q&A Appendix
 
-### A. Ciphertext Relay
+### 12. A. Ciphertext Relay
 
 **Source pattern:** source slide 6.
 
@@ -273,7 +278,7 @@ Each slide uses at most two saturated semantic colors plus neutral text. The col
 - Apply the new canvas and minimum contrast rules.
 - Keep it out of the timed main narrative.
 
-### B. Commitment Is Not the Proof
+### 13. B. Commitment Is Not the Proof
 
 **Source pattern:** source slide 4's two-row proof relation.
 
