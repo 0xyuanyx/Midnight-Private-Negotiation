@@ -35,7 +35,7 @@ Counter 예제를 기반으로 만든 기존 데모는 로컬 작업 공간의 `
 ├── apps/
 │   └── demo-web/                    # 새 3패널 웹 DApp
 ├── packages/
-│   ├── agent-core/                   # 한도 비인지 GPT mock·로컬 PolicyGuard
+│   ├── agent-core/                   # 한도 비인지 mock/OpenAI provider·로컬 PolicyGuard
 │   ├── demo-controller/             # 실행 제어와 정제된 화면 이벤트 중계
 │   ├── buyer-runtime/               # Buyer private state·GPT·PolicyGuard
 │   ├── seller-runtime/              # Seller private state·GPT·PolicyGuard
@@ -734,14 +734,14 @@ type DemoEvent = {
 
 프로세스 격리, IPC 이벤트 배선, WebSocket 라우터, 3패널 웹 DApp, GPT mock과 역할별 PolicyGuard, 독립 Room Relay, Uint64 Compact 계약과 로컬 Midnight 연결까지 구현되었다. GPT API 키가 없어도 암호화된 로컬 결정론적 협상 provider로 성사·결렬 화면을 검증할 수 있다.
 
-현재 구현에는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller, WebSocket, 터미널 입력 UI, 한도를 받지 않는 최대 5개 후보 GPT mock, 역할별 로컬 PolicyGuard, 판정 결과 없는 최대 3회 stateless 재요청, 외부 AI 없이 동작하는 역할 로컬 fallback, Controller를 우회해 Buyer·Seller가 직접 연결하는 독립 Room Relay, X25519와 HKDF-SHA-256 세션 키, 메타데이터 AAD를 사용하는 AES-256-GCM 불투명 협상 패킷, sequence replay·nonce 재사용·방 교차 차단, 최대 10라운드 협상이 포함된다. fallback은 한도를 provider 입력으로 전달하지 않고 런타임 내부에서만 안전한 제안·수락을 결정한다.
+현재 구현에는 공용 protocol, Buyer·Seller·Observer 별도 프로세스, Demo Controller, WebSocket, 터미널 입력 UI, 공개 입력만 받는 최대 5개 후보 GPT mock과 OpenAI Responses API provider, strict Structured Outputs, 역할별 로컬 PolicyGuard, 판정 결과 없는 최대 3회 stateless 재요청, 외부 AI 없이 동작하는 역할 로컬 fallback, Controller를 우회해 Buyer·Seller가 직접 연결하는 독립 Room Relay, X25519와 HKDF-SHA-256 세션 키, 메타데이터 AAD를 사용하는 AES-256-GCM 불투명 협상 패킷, sequence replay·nonce 재사용·방 교차 차단, 최대 10라운드 협상이 포함된다. fallback은 한도를 provider 입력으로 전달하지 않고 런타임 내부에서만 안전한 제안·수락을 결정한다.
 
 로컬 체인 모드에서는 Buyer가 무작위 지갑과 private state로 계약을 배포하고 Seller가 암호화 채널로 받은 계약에 참여한다. Buyer의 `authorizeHiddenPrice`와 Seller의 `settle`은 서로 다른 proof server를 사용한다. Observer 프로세스는 지갑, private state, proof server 구성을 받지 않고 Indexer 공개 상태만 조회한다. Controller는 mock 타이머로 공개 상태를 만들지 않으며 Observer가 Indexer에서 확인한 `OPEN`, `AUTHORIZED`, `SETTLED`만 WebSocket으로 전달한다. 실제 로컬 체인 E2E에서 Buyer `1,000,000 KRW`, Seller `700,000 KRW` 조건이 외부 AI 키 없이 `700,000 KRW`로 합의되고, 최종 금액이 `SETTLED` 이전 공개 이벤트에는 나타나지 않는 것을 확인했다.
 
 다음 작업 묶음이 남아 있다.
 
 1. 로컬 mock 전체 흐름 녹화 리허설
-2. 필요 시 실제 GPT candidate provider와 `store: false` 요청 어댑터 연결
+2. OpenAI 프로젝트 할당량 복구 후 `npm run test:openai`로 실제 모델 협상 품질 재검증
 3. 오류 E2E 테스트, 프라이버시 감사, 발표 화면 최종 검증
 
-현재 화면 흐름은 실제 역할 프로세스와 암호화된 로컬 협상 이벤트를 사용한다. GPT mock과 실제 GPT provider는 동일한 `CandidateProvider` 경계를 사용하므로, 실제 API 연결 시에도 PolicyGuard와 private state는 역할 런타임 내부에 유지한다.
+현재 화면 흐름은 실제 역할 프로세스와 암호화된 로컬 협상 이벤트를 사용한다. GPT mock과 OpenAI provider는 동일한 `CandidateProvider` 경계를 사용하며, 실제 API 모드에서도 PolicyGuard와 private state는 역할 런타임 내부에 유지한다. OpenAI 입력에는 공개 기준가가 추가되지만 비공개 한도는 추가되지 않는다. 2026-07-26 실제 호출은 OpenAI에서 `429 insufficient_quota`로 거절되었고, 이때 로컬 fallback이 전체 런타임 거래를 정상 완료하는 것까지 확인했다.

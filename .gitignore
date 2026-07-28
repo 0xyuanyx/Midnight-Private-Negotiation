@@ -72,6 +72,11 @@ __pycache__/
 .superpowers/
 .superdesign/tmp/
 .superdesign/reviews/
+/.agents/
+/.claude/
+/.codex/
+/.tmp/
+/.omd/sync.lock.json
 
 # Archived v1 demo
 /v1/

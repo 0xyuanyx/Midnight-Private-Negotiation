@@ -11,11 +11,14 @@
     "clean": "tsc -b --clean",
     "contract:compile": "npm run compact --workspace @midnight-negotiation/negotiation-contract",
     "demo:controller": "npm run build && node packages/demo-controller/dist/server.js",
+    "demo:ai": "NEGOTIATION_AI_PROVIDER=openai npm run demo:controller",
     "demo:midnight": "MIDNIGHT_MODE=local npm run demo:controller",
+    "demo:midnight:ai": "NEGOTIATION_AI_PROVIDER=openai MIDNIGHT_MODE=local npm run demo:controller",
     "midnight:up": "docker compose -f infra/midnight-local.yml up -d --wait",
     "midnight:down": "docker compose -f infra/midnight-local.yml down",
     "typecheck": "tsc -b --pretty false",
-    "test": "npm run build && node --test packages/agent-core/test/*.test.mjs packages/protocol/test/*.test.mjs packages/negotiation-contract/test/*.test.mjs packages/room-relay/test/*.test.mjs packages/demo-controller/test/*.test.mjs"
+    "test": "npm run build && node --test packages/agent-core/test/*.test.mjs packages/protocol/test/*.test.mjs packages/negotiation-contract/test/*.test.mjs packages/room-relay/test/*.test.mjs packages/demo-controller/test/*.test.mjs",
+    "test:openai": "npm run build && node scripts/test-openai-negotiation.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

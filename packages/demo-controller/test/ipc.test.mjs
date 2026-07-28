@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createRoomSessionId,
   IsolatedRuntimeController,
+  runtimeProcessEnvironment,
 } from "../dist/index.js";
 
 const waitFor = (controller, predicate, timeoutMs = 7_000) =>
@@ -32,6 +33,39 @@ test("scopes identical product codes to one browser demo instance", () => {
 
   assert.equal(first, "room-1111-12345678-1234-1234-1234-123456789abc");
   assert.notEqual(first, second);
+});
+
+test("scopes the OpenAI credential to Buyer and Seller runtime environments", () => {
+  const source = {
+    PATH: "/usr/bin",
+    NEGOTIATION_AI_PROVIDER: "openai",
+    MEMO_OPENAI_API_KEY: "memo-secret",
+    OPENAI_NEGOTIATION_MODEL: "gpt-configured",
+    NEGOTIATION_REFERENCE_PRICE_KRW: "125000",
+  };
+
+  const buyer = runtimeProcessEnvironment("buyer", source);
+  const seller = runtimeProcessEnvironment("seller", source);
+  const observer = runtimeProcessEnvironment("observer", source);
+
+  for (const party of [buyer, seller]) {
+    assert.equal(party.NEGOTIATION_AI_PROVIDER, "openai");
+    assert.equal(party.OPENAI_API_KEY, "memo-secret");
+    assert.equal(party.OPENAI_NEGOTIATION_MODEL, "gpt-configured");
+    assert.equal(party.NEGOTIATION_REFERENCE_PRICE_KRW, "125000");
+    assert.equal(party.MEMO_OPENAI_API_KEY, undefined);
+  }
+  assert.deepEqual(observer, { PATH: "/usr/bin" });
+  assert.equal(observer.OPENAI_API_KEY, undefined);
+  assert.equal(observer.NEGOTIATION_AI_PROVIDER, undefined);
+
+  assert.throws(
+    () =>
+      runtimeProcessEnvironment("buyer", {
+        NEGOTIATION_AI_PROVIDER: "openai",
+      }),
+    /API key/,
+  );
 });
 
 test("does not emit a peer waiting log when the other party is already in the room", async () => {

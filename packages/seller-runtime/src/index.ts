@@ -22,7 +22,7 @@ import {
   type RelayPeerKey,
 } from "@midnight-negotiation/room-relay";
 import {
-  createDeterministicMockProvider,
+  createCandidateProviderFromEnvironment,
   generateAllowedCandidate,
   generateLocalFallbackCandidate,
   type NegotiationCandidate,
@@ -38,7 +38,9 @@ import type { SellerPrivateState } from "@midnight-negotiation/negotiation-contr
 
 const role = "seller" as const;
 const MAX_ROUNDS = 10;
-const candidateProvider = createDeterministicMockProvider();
+const publicReferencePrice =
+  process.env.NEGOTIATION_REFERENCE_PRICE_KRW ?? "100000";
+const candidateProvider = createCandidateProviderFromEnvironment();
 const chainMode = process.env.MIDNIGHT_MODE === "local";
 
 let sessionId: string | undefined;
@@ -403,6 +405,7 @@ const respondToProposal = async (input: {
     role,
     productCode,
     round: input.round,
+    publicReferencePrice,
     currentOffer: {
       maker: "buyer",
       price: input.price,

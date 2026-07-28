@@ -89,12 +89,45 @@ const waitForEndpoint = async (
 
 const publicProcessEnvironment = (
   overrides: NodeJS.ProcessEnv = {},
+  source: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv => {
   const environment: NodeJS.ProcessEnv = {};
   for (const key of ["PATH", "TMPDIR", "TMP", "TEMP", "LANG", "LC_ALL"]) {
-    const value = process.env[key];
+    const value = source[key];
     if (value !== undefined) environment[key] = value;
   }
+  return { ...environment, ...overrides };
+};
+
+export const runtimeProcessEnvironment = (
+  role: Role,
+  source: NodeJS.ProcessEnv = process.env,
+  overrides: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv => {
+  const environment = publicProcessEnvironment({}, source);
+  if (role === "observer") {
+    return { ...environment, ...overrides };
+  }
+
+  const provider = source.NEGOTIATION_AI_PROVIDER?.trim() || "mock";
+  if (provider !== "mock" && provider !== "openai") {
+    throw new Error(`unsupported negotiation AI provider: ${provider}`);
+  }
+  environment.NEGOTIATION_AI_PROVIDER = provider;
+  environment.NEGOTIATION_REFERENCE_PRICE_KRW =
+    source.NEGOTIATION_REFERENCE_PRICE_KRW?.trim() || "100000";
+
+  if (provider === "openai") {
+    const apiKey =
+      source.OPENAI_API_KEY?.trim() || source.MEMO_OPENAI_API_KEY?.trim();
+    if (apiKey === undefined || apiKey.length === 0) {
+      throw new Error("OpenAI API key is required for the openai provider");
+    }
+    environment.OPENAI_API_KEY = apiKey;
+    environment.OPENAI_NEGOTIATION_MODEL =
+      source.OPENAI_NEGOTIATION_MODEL?.trim() || "gpt-5.6-sol";
+  }
+
   return { ...environment, ...overrides };
 };
 
@@ -162,7 +195,7 @@ export class IsolatedRuntimeController {
       (role) =>
         new Promise<RuntimeIdentity>((resolve, reject) => {
           const child = fork(this.#entries[role], [], {
-            env: publicProcessEnvironment({
+            env: runtimeProcessEnvironment(role, process.env, {
               ...(chainMode
                 ? {
                     MIDNIGHT_MODE: "local",

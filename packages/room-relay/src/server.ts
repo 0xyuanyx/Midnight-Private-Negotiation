@@ -167,6 +167,10 @@ const routePacket = (socket: Socket, packet: RelayPacket): void => {
 const server = createServer((socket) => {
   socket.setEncoding("utf8");
   buffers.set(socket, "");
+  socket.on("error", () => {
+    // A peer can disappear between reads or while the relay is shutting down.
+    // Keep the failure scoped to that connection; the close handler removes it.
+  });
   socket.on("data", (chunk: string) => {
     let buffer = (buffers.get(socket) ?? "") + chunk;
     if (Buffer.byteLength(buffer, "utf8") > 32_768) {

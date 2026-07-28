@@ -22,7 +22,7 @@ import {
   type RelayPeerKey,
 } from "@midnight-negotiation/room-relay";
 import {
-  createDeterministicMockProvider,
+  createCandidateProviderFromEnvironment,
   generateAllowedCandidate,
   generateLocalFallbackCandidate,
   type NegotiationCandidate,
@@ -38,7 +38,9 @@ import type { BuyerPrivateState } from "@midnight-negotiation/negotiation-contra
 
 const role = "buyer" as const;
 const MAX_ROUNDS = 10;
-const candidateProvider = createDeterministicMockProvider();
+const publicReferencePrice =
+  process.env.NEGOTIATION_REFERENCE_PRICE_KRW ?? "100000";
+const candidateProvider = createCandidateProviderFromEnvironment();
 const chainMode = process.env.MIDNIGHT_MODE === "local";
 
 let sessionId: string | undefined;
@@ -511,16 +513,20 @@ const generateAndExecute = async (
     role,
     maximumPrice: buyerMaxPrice,
   } as const;
+  const publicContext: PublicNegotiationContext = {
+    ...context,
+    publicReferencePrice,
+  };
   const candidate = (await generateAllowedCandidate({
     provider: candidateProvider,
-    context,
+    context: publicContext,
     policy,
-  })) ?? generateLocalFallbackCandidate({ context, policy });
+  })) ?? generateLocalFallbackCandidate({ context: publicContext, policy });
   if (candidate === undefined) {
     publishOutcome({ result: "CANCELLED" });
     return;
   }
-  executeCandidate(context, candidate);
+  executeCandidate(publicContext, candidate);
 };
 
 send({

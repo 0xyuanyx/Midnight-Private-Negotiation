@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { createConnection } from "node:net";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
@@ -248,6 +249,43 @@ test("routes ciphertext in a separate process and rejects replay or room crossov
     assert.notEqual(relay.child.pid, process.pid);
   } finally {
     for (const client of clients) client.close();
+    await stopRelay(relay.child);
+  }
+});
+
+test("survives an abrupt client connection reset", async () => {
+  const relay = await startRelay();
+  const socket = createConnection({ host: relay.host, port: relay.port });
+
+  try {
+    await new Promise((resolve, reject) => {
+      socket.once("connect", resolve);
+      socket.once("error", reject);
+    });
+    socket.write(
+      `${JSON.stringify({
+        relayProtocolVersion: 1,
+        type: "REGISTER",
+        sessionId: "room-reset",
+        productCode: "4821",
+        role: "buyer",
+        publicKey: Buffer.from("buyer-reset-key").toString("base64"),
+        authToken: relay.buyerToken,
+      })}\n`,
+    );
+    socket.resetAndDestroy();
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(relay.child.exitCode, null);
+
+    const replacement = createConnection({ host: relay.host, port: relay.port });
+    await new Promise((resolve, reject) => {
+      replacement.once("connect", resolve);
+      replacement.once("error", reject);
+    });
+    replacement.end();
+  } finally {
+    socket.destroy();
     await stopRelay(relay.child);
   }
 });

@@ -1,0 +1,259 @@
+{"kind":"deck","id":"pr/zdoe74","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/y90nupkv","slide":1,"title":"한도는 숨기고,","textShapes":5}
+{"kind":"textbox","id":"sh/547294r6","slide":1,"text":"한도는 숨기고,\n합의만 증명한다","textPreview":"한도는 숨기고, | 합의만 증명한다","textChars":17,"textLines":2,"bbox":[64,154,780,192]}
+{"kind":"textbox","id":"sh/k3yl0zql","slide":1,"text":"비공개 한도  →  검증된 합의","textPreview":"비공개 한도  →  검증된 합의","textChars":17,"textLines":1,"bbox":[64,386,770,34]}
+{"kind":"textbox","id":"sh/7qp4be9c","slide":1,"text":"AI 협상 · 로컬 정책 검사 · 영지식 증명","textPreview":"AI 협상 · 로컬 정책 검사 · 영지식 증명","textChars":25,"textLines":1,"bbox":[64,448,680,30]}
+{"kind":"shape","id":"sh/ul4vaxgb","slide":1,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/vmdcj2xw","slide":1,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/4r6dg7et","slide":1,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"image","id":"im/alovadw3","slide":1,"name":"","bbox":[64,44.07,184,39.87]}
+{"kind":"notes","id":"nt/y90nupkv","slide":1,"text":"오프닝: 이 데모는 AI 대화를 보여주는 데모가 아니라 비밀이 어디까지 이동하는지 보여주는 데모입니다. 구매·판매 한도는 각자 로컬에 남고, 성공한 최종 가격만 공개됩니다.\n[Sources]\n- https://midnight.network/overview\n- https://midnight.network/brand-hub\n[/Sources]"}
+{"kind":"slide","id":"sl/hwbqtkby","slide":2,"title":"기존 협상은 한곳에 너무 많은 신뢰를 요구한다","textShapes":13}
+{"kind":"textbox","id":"sh/9072xkry","slide":2,"text":"기존 협상은 한곳에 너무 많은 신뢰를 요구한다","textPreview":"기존 협상은 한곳에 너무 많은 신뢰를 요구한다","textChars":25,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/ozy1ofad","slide":2,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/b29kza94","slide":2,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/a10jqpsj","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"textbox","id":"sh/x4r21kru","slide":2,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[72,194,60,40]}
+{"kind":"textbox","id":"sh/w3i1sfa9","slide":2,"text":"플랫폼","textPreview":"플랫폼","textChars":3,"textLines":1,"bbox":[164,190,200,44]}
+{"kind":"textbox","id":"sh/r65knqtk","slide":2,"text":"양쪽 한도를 모두 본다","textPreview":"양쪽 한도를 모두 본다","textChars":12,"textLines":1,"bbox":[412,195,730,40]}
+{"kind":"shape","id":"sh/q5wjelsz","slide":2,"bbox":[164,262,978,0]}
+{"kind":"textbox","id":"sh/ove9o7yd","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[72,314,60,40]}
+{"kind":"textbox","id":"sh/9wnqhczy","slide":2,"text":"AI 요청","textPreview":"AI 요청","textChars":5,"textLines":1,"bbox":[164,310,200,44]}
+{"kind":"textbox","id":"sh/mtwrmxg7","slide":2,"text":"비공개 값을 모델 제공자에게 보낸다","textPreview":"비공개 값을 모델 제공자에게 보낸다","textChars":19,"textLines":1,"bbox":[412,315,730,40]}
+{"kind":"shape","id":"sh/nu58f2hs","slide":2,"bbox":[164,382,978,0]}
+{"kind":"textbox","id":"sh/wjy9sry9","slide":2,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[72,434,60,40]}
+{"kind":"textbox","id":"sh/xk7qlczu","slide":2,"text":"공개 원장","textPreview":"공개 원장","textChars":5,"textLines":1,"bbox":[164,430,200,44]}
+{"kind":"textbox","id":"sh/ahwrqhgj","slide":2,"text":"원문 공개는 되돌릴 수 없다","textPreview":"원문 공개는 되돌릴 수 없다","textChars":15,"textLines":1,"bbox":[412,435,730,40]}
+{"kind":"shape","id":"sh/bip8jmho","slide":2,"bbox":[164,502,978,0]}
+{"kind":"textbox","id":"sh/cnupgny5","slide":2,"text":"문제는 협상 방식보다 누가 비밀을 볼 수 있느냐다.","textPreview":"문제는 협상 방식보다 누가 비밀을 볼 수 있느냐다.","textChars":28,"textLines":1,"bbox":[164,558,930,46]}
+{"kind":"notes","id":"nt/hwbqtkby","slide":2,"text":"중앙 서버에 한도를 모두 보내면 그 서버가 가장 큰 신뢰 대상이 됩니다. 온체인에서 값을 감춰도 외부 AI prompt에 넣으면 서비스 신뢰 경계는 넓어집니다.\n[Sources]\n- https://midnight.network/overview\n[/Sources]"}
+{"kind":"slide","id":"sl/uw4ddu","slide":3,"title":"Midnight는 비공개 입력과 공개 상태를 분리한다","textShapes":10}
+{"kind":"textbox","id":"sh/n618fmd0","slide":3,"text":"Midnight는 비공개 입력과 공개 상태를 분리한다","textPreview":"Midnight는 비공개 입력과 공개 상태를 분리한다","textChars":29,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/o7ap8rul","slide":3,"bbox":[392,325,88,0]}
+{"kind":"shape","id":"sh/98jqhwv6","slide":3,"bbox":[800,325,88,0]}
+{"kind":"shape","id":"sh/eh872hcj","slide":3,"bbox":[72,210,320,230]}
+{"kind":"textbox","id":"sh/zih8b2d4","slide":3,"text":"비공개 입력","textPreview":"비공개 입력","textChars":6,"textLines":1,"bbox":[94,232,276,34]}
+{"kind":"shape","id":"sh/0jap47up","slide":3,"bbox":[94,278,276,0]}
+{"kind":"textbox","id":"sh/1kjqdcva","slide":3,"text":"구매자 최대 한도\n판매자 최소 금액","textPreview":"구매자 최대 한도 | 판매자 최소 금액","textChars":19,"textLines":2,"bbox":[96,294,272,126]}
+{"kind":"shape","id":"sh/ydcre1cn","slide":3,"bbox":[480,210,320,230]}
+{"kind":"textbox","id":"sh/jel8n6d8","slide":3,"text":"Compact 회로","textPreview":"Compact 회로","textChars":10,"textLines":1,"bbox":[502,232,276,34]}
+{"kind":"shape","id":"sh/n2pon250","slide":3,"bbox":[502,278,276,0]}
+{"kind":"textbox","id":"sh/21gnexof","slide":3,"text":"원문을 공개하지 않고\n조건 관계를 검사","textPreview":"원문을 공개하지 않고 | 조건 관계를 검사","textChars":21,"textLines":2,"bbox":[504,294,272,126]}
+{"kind":"shape","id":"sh/p476pcn6","slide":3,"bbox":[888,210,320,230]}
+{"kind":"textbox","id":"sh/o3y5g76l","slide":3,"text":"공개 결과","textPreview":"공개 결과","textChars":5,"textLines":1,"bbox":[910,232,276,34]}
+{"kind":"shape","id":"sh/b6porm5w","slide":3,"bbox":[910,278,276,0]}
+{"kind":"textbox","id":"sh/a5gnihor","slide":3,"text":"거래 상태\n확정된 최종 가격","textPreview":"거래 상태 | 확정된 최종 가격","textChars":15,"textLines":2,"bbox":[912,294,272,126]}
+{"kind":"textbox","id":"sh/x8r6tcn2","slide":3,"text":"원문 대신 “조건을 만족했다”는 사실만 증명한다.","textPreview":"원문 대신 “조건을 만족했다”는 사실만 증명한다.","textChars":27,"textLines":1,"bbox":[220,514,840,48]}
+{"kind":"shape","id":"sh/c7i5k7mh","slide":3,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/za9ovm58","slide":3,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/y90nmh4n","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"notes","id":"nt/uw4ddu","slide":3,"text":"Midnight는 공개 원장과 비공개 입력을 분리합니다. 구매자와 판매자의 원문 한도는 비공개 입력으로 남고, Compact 회로가 두 값과 합의 가격의 관계를 검사합니다. 공개 원장에는 거래 상태와 확정된 최종 가격만 기록됩니다.\n[Sources]\n- https://midnight.network/overview\n[/Sources]"}
+{"kind":"slide","id":"sl/ofy9wn61","slide":4,"title":"비밀은 각자의 로컬 경계 안에 남는다","textShapes":12}
+{"kind":"textbox","id":"sh/cza94vmx","slide":4,"text":"비밀은 각자의 로컬 경계 안에 남는다","textPreview":"비밀은 각자의 로컬 경계 안에 남는다","textChars":20,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/d0jax03i","slide":4,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/298ryl4v","slide":4,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/3ah8rqlg","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/obq90bml","slide":4,"bbox":[332,304,178,0]}
+{"kind":"shape","id":"sh/pcjqtg36","slide":4,"bbox":[770,304,178,0]}
+{"kind":"shape","id":"sh/m5cra54z","slide":4,"bbox":[639.5,400,1,48]}
+{"kind":"shape","id":"sh/n6ls3alk","slide":4,"bbox":[72,220,260,180]}
+{"kind":"textbox","id":"sh/n2l4fq98","slide":4,"text":"구매자","textPreview":"구매자","textChars":3,"textLines":1,"bbox":[94,242,216,34]}
+{"kind":"shape","id":"sh/m1c3mlsn","slide":4,"bbox":[94,288,216,0]}
+{"kind":"textbox","id":"sh/943mhgre","slide":4,"text":"최대 한도\n난수 · 비밀키","textPreview":"최대 한도 | 난수 · 비밀키","textChars":14,"textLines":2,"bbox":[96,304,212,76]}
+{"kind":"shape","id":"sh/83ulovat","slide":4,"bbox":[510,200,260,200]}
+{"kind":"textbox","id":"sh/v6l4jq94","slide":4,"text":"중계 제어","textPreview":"중계 제어","textChars":5,"textLines":1,"bbox":[532,222,216,34]}
+{"kind":"shape","id":"sh/a5c3ql8z","slide":4,"bbox":[532,268,216,0]}
+{"kind":"textbox","id":"sh/x8nml0ra","slide":4,"text":"명령 전달\n정제된 이벤트만 중계","textPreview":"명령 전달 | 정제된 이벤트만 중계","textChars":17,"textLines":2,"bbox":[534,284,212,96]}
+{"kind":"shape","id":"sh/w7ulsvqp","slide":4,"bbox":[948,220,260,180]}
+{"kind":"textbox","id":"sh/ja54na9g","slide":4,"text":"판매자","textPreview":"판매자","textChars":3,"textLines":1,"bbox":[970,242,216,34]}
+{"kind":"shape","id":"sh/i9w3u58v","slide":4,"bbox":[970,288,216,0]}
+{"kind":"textbox","id":"sh/e10f2twf","slide":4,"text":"최소 금액\n난수 · 비밀키","textPreview":"최소 금액 | 난수 · 비밀키","textChars":14,"textLines":2,"bbox":[972,304,212,76]}
+{"kind":"shape","id":"sh/f29gbyx0","slide":4,"bbox":[510,448,260,142]}
+{"kind":"textbox","id":"sh/03ix43e5","slide":4,"text":"관찰자","textPreview":"관찰자","textChars":3,"textLines":1,"bbox":[532,470,216,34]}
+{"kind":"shape","id":"sh/14ryd8fq","slide":4,"bbox":[532,516,216,0]}
+{"kind":"textbox","id":"sh/6d0fytg3","slide":4,"text":"공개 상태만 조회","textPreview":"공개 상태만 조회","textChars":9,"textLines":1,"bbox":[534,532,212,38]}
+{"kind":"textbox","id":"sh/re9g7yxo","slide":4,"text":"역할별 프로세스를 나누고 필요한 정보만 전달한다.","textPreview":"역할별 프로세스를 나누고 필요한 정보만 전달한다.","textChars":27,"textLines":1,"bbox":[220,612,840,32]}
+{"kind":"notes","id":"nt/ofy9wn61","slide":4,"text":"Buyer, Seller, Observer는 서로 다른 PID로 실행됩니다. Controller는 양쪽 한도를 저장하지 않고, 브라우저에는 검증된 정제 이벤트만 보냅니다.\n[Sources]\n- Local source: packages/demo-controller/src/orchestrator.ts\n[/Sources]"}
+{"kind":"slide","id":"sl/jyx0ra1s","slide":5,"title":"제안은 AI, 결정은 로컬","textShapes":12}
+{"kind":"textbox","id":"sh/1cj2d8b6","slide":5,"text":"제안은 AI, 결정은 로컬","textPreview":"제안은 AI, 결정은 로컬","textChars":14,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/0ba143al","slide":5,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/rm1k7yt4","slide":5,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/ql8jytsj","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/doj29oba","slide":5,"bbox":[144,348,992,0]}
+{"kind":"shape","id":"sh/sna103ap","slide":5,"bbox":[196,338,2,20]}
+{"kind":"textbox","id":"sh/3ihk3et8","slide":5,"text":"공개 맥락","textPreview":"공개 맥락","textChars":5,"textLines":1,"bbox":[72,244,250,44]}
+{"kind":"textbox","id":"sh/ih8ju9sn","slide":5,"text":"상품 코드 · 협상 차례\n현재 공개 제안","textPreview":"상품 코드 · 협상 차례 | 현재 공개 제안","textChars":22,"textLines":2,"bbox":[72,382,250,88]}
+{"kind":"shape","id":"sh/kbm987y5","slide":5,"bbox":[490,338,2,20]}
+{"kind":"textbox","id":"sh/5cva1cfq","slide":5,"text":"AI","textPreview":"AI","textChars":2,"textLines":1,"bbox":[366,244,250,44]}
+{"kind":"textbox","id":"sh/i94r6xgz","slide":5,"text":"후보 행동·금액\n최대 5개 생성","textPreview":"후보 행동·금액 | 최대 5개 생성","textChars":17,"textLines":2,"bbox":[366,382,250,88]}
+{"kind":"shape","id":"sh/jadsz2xk","slide":5,"bbox":[784,338,2,20]}
+{"kind":"textbox","id":"sh/w72947yt","slide":5,"text":"로컬 정책","textPreview":"로컬 정책","textChars":5,"textLines":1,"bbox":[660,244,250,44]}
+{"kind":"textbox","id":"sh/x8vaxsfe","slide":5,"text":"각자의 한도를\n넘지 않는지 검사","textPreview":"각자의 한도를 | 넘지 않는지 검사","textChars":17,"textLines":2,"bbox":[660,382,250,88]}
+{"kind":"shape","id":"sh/a5kr2xg3","slide":5,"bbox":[1078,338,2,20]}
+{"kind":"textbox","id":"sh/v6tsv2xo","slide":5,"text":"암호화 전송","textPreview":"암호화 전송","textChars":6,"textLines":1,"bbox":[954,244,250,44]}
+{"kind":"textbox","id":"sh/g36tgryd","slide":5,"text":"검사를 통과한\n후보만 전달","textPreview":"검사를 통과한 | 후보만 전달","textChars":14,"textLines":2,"bbox":[954,382,250,88]}
+{"kind":"textbox","id":"sh/h4fa9wfy","slide":5,"text":"AI는 제안만, 로컬 정책이 결정한다.","textPreview":"AI는 제안만, 로컬 정책이 결정한다.","textChars":21,"textLines":1,"bbox":[170,516,940,50]}
+{"kind":"notes","id":"nt/jyx0ra1s","slide":5,"text":"모델은 정확한 한도를 받지 않습니다. 공개된 현재 제안과 기준가로 후보만 만들고, 전송·수락 가능한지는 역할 프로세스 안의 PolicyGuard가 자기 한도로 결정합니다.\n[Sources]\n- Local source: packages/agent-core/src/index.ts\n- https://developers.openai.com/api/reference/resources/responses/methods/create\n[/Sources]"}
+{"kind":"slide","id":"sl/i107q5of","slide":6,"title":"실패한 후보는 흔적 없이 버린다","textShapes":17}
+{"kind":"textbox","id":"sh/dgbulwnm","slide":6,"text":"실패한 후보는 흔적 없이 버린다","textPreview":"실패한 후보는 흔적 없이 버린다","textChars":17,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/cf2tcr61","slide":6,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/z2tcnm5s","slide":6,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/yhkbe1o7","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"textbox","id":"sh/l4bupwny","slide":6,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[150,196,54,44]}
+{"kind":"textbox","id":"sh/032tgr6d","slide":6,"text":"후보 탈락","textPreview":"후보 탈락","textChars":5,"textLines":1,"bbox":[226,196,320,44]}
+{"kind":"textbox","id":"sh/n6dcr65o","slide":6,"text":"로컬 정책 검사에서 거부","textPreview":"로컬 정책 검사에서 거부","textChars":13,"textLines":1,"bbox":[600,196,520,44]}
+{"kind":"shape","id":"sh/m5kbi1oj","slide":6,"bbox":[150,256,970,0]}
+{"kind":"textbox","id":"sh/w32dkbuh","slide":6,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[150,278,54,44]}
+{"kind":"textbox","id":"sh/x4vedgvm","slide":6,"text":"즉시 폐기","textPreview":"즉시 폐기","textChars":5,"textLines":1,"bbox":[226,278,320,44]}
+{"kind":"textbox","id":"sh/ahkvi1cb","slide":6,"text":"외부 전송·로그 없음","textPreview":"외부 전송·로그 없음","textChars":11,"textLines":1,"bbox":[600,278,520,44]}
+{"kind":"shape","id":"sh/v2twb6dw","slide":6,"bbox":[150,338,970,0]}
+{"kind":"textbox","id":"sh/k7mxovud","slide":6,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[150,360,54,44]}
+{"kind":"textbox","id":"sh/58vehgvy","slide":6,"text":"새 요청","textPreview":"새 요청","textChars":4,"textLines":1,"bbox":[226,360,320,44]}
+{"kind":"textbox","id":"sh/i54fmlc7","slide":6,"text":"이전 판정과 응답 미사용","textPreview":"이전 판정과 응답 미사용","textChars":13,"textLines":1,"bbox":[600,360,520,44]}
+{"kind":"shape","id":"sh/j6dwfqds","slide":6,"bbox":[150,420,970,0]}
+{"kind":"textbox","id":"sh/sb6xsvu9","slide":6,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[150,442,54,44]}
+{"kind":"textbox","id":"sh/tcfel0vu","slide":6,"text":"다음 라운드","textPreview":"다음 라운드","textChars":6,"textLines":1,"bbox":[226,442,320,44]}
+{"kind":"textbox","id":"sh/hgrmpwj2","slide":6,"text":"공개 맥락만 다시 전달","textPreview":"공개 맥락만 다시 전달","textChars":12,"textLines":1,"bbox":[600,442,520,44]}
+{"kind":"shape","id":"sh/gfi5grih","slide":6,"bbox":[150,548,970,0]}
+{"kind":"textbox","id":"sh/fe94nm1w","slide":6,"text":"한도 미전송  ·  대화 저장 안 함  ·  이전 응답 미사용  ·  최대 10라운드","textPreview":"한도 미전송  ·  대화 저장 안 함  ·  이전 응답 미사용  ·  최대 10라운드","textChars":47,"textLines":1,"bbox":[150,566,970,34]}
+{"kind":"textbox","id":"sh/ud0ne10b","slide":6,"text":"실패 횟수도 다음 AI 요청에 포함하지 않는다.","textPreview":"실패 횟수도 다음 AI 요청에 포함하지 않는다.","textChars":26,"textLines":1,"bbox":[240,618,800,26]}
+{"kind":"notes","id":"nt/i107q5of","slide":6,"text":"같은 대화에 후보 거절 사실을 알려주면 반복된 성공·실패가 한도 신호가 될 수 있습니다. 그래서 previous response나 conversation을 쓰지 않습니다. store:false는 조직 단위 ZDR과 같다고 표현하지 않습니다.\n[Sources]\n- https://developers.openai.com/api/docs/guides/migrate-to-responses\n- https://developers.openai.com/api/reference/resources/responses/methods/create\n- Local source: packages/agent-core/src/index.ts\n[/Sources]"}
+{"kind":"slide","id":"sl/x8f69ofe","slide":7,"title":"중계 서버는 암호문만 전달한다","textShapes":11}
+{"kind":"textbox","id":"sh/yhg7epsj","slide":7,"text":"중계 서버는 암호문만 전달한다","textPreview":"중계 서버는 암호문만 전달한다","textChars":16,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/zi98nu94","slide":7,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/87ipkzal","slide":7,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/98rqt4r6","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/ml07i9sv","slide":7,"bbox":[322,340,143,0]}
+{"kind":"shape","id":"sh/7m98ru9g","slide":7,"bbox":[815,340,143,0]}
+{"kind":"shape","id":"sh/oryp8fah","slide":7,"bbox":[72,250,250,180]}
+{"kind":"textbox","id":"sh/pc76hkr2","slide":7,"text":"구매자","textPreview":"구매자","textChars":3,"textLines":1,"bbox":[94,272,206,34]}
+{"kind":"shape","id":"sh/h4bupgn6","slide":7,"bbox":[94,318,206,0]}
+{"kind":"textbox","id":"sh/w32twb6l","slide":7,"text":"협상 메시지\n암호화 · 복호화","textPreview":"협상 메시지 | 암호화 · 복호화","textChars":16,"textLines":2,"bbox":[96,334,202,76]}
+{"kind":"shape","id":"sh/v2tcn650","slide":7,"bbox":[465,220,350,240]}
+{"kind":"textbox","id":"sh/u1kbu1ov","slide":7,"text":"암호문 중계 서버","textPreview":"암호문 중계 서버","textChars":9,"textLines":1,"bbox":[487,242,306,34]}
+{"kind":"shape","id":"sh/5svutgni","slide":7,"bbox":[487,288,306,0]}
+{"kind":"textbox","id":"sh/47mt0b6x","slide":7,"text":"상품 코드와 전송 순서만 확인\n협상 내용은 읽지 못함","textPreview":"상품 코드와 전송 순서만 확인 | 협상 내용은 읽지 못함","textChars":29,"textLines":2,"bbox":[489,304,302,136]}
+{"kind":"shape","id":"sh/j6dcr65c","slide":7,"bbox":[958,250,250,180]}
+{"kind":"textbox","id":"sh/i54bylor","slide":7,"text":"판매자","textPreview":"판매자","textChars":3,"textLines":1,"bbox":[980,272,206,34]}
+{"kind":"shape","id":"sh/twfux0ne","slide":7,"bbox":[980,318,206,0]}
+{"kind":"textbox","id":"sh/svmt4v6t","slide":7,"text":"협상 메시지\n암호화 · 복호화","textPreview":"협상 메시지 | 암호화 · 복호화","textChars":16,"textLines":2,"bbox":[982,334,202,76]}
+{"kind":"textbox","id":"sh/cbe5g3ih","slide":7,"text":"구매자와 판매자 사이에서만 평문을 볼 수 있다.","textPreview":"구매자와 판매자 사이에서만 평문을 볼 수 있다.","textChars":26,"textLines":1,"bbox":[220,520,840,44]}
+{"kind":"textbox","id":"sh/dcnm98zm","slide":7,"text":"중계 서버에는 방 매칭에 필요한 정보와 암호문만 남는다.","textPreview":"중계 서버에는 방 매칭에 필요한 정보와 암호문만 남는다.","textChars":31,"textLines":1,"bbox":[180,580,920,30]}
+{"kind":"notes","id":"nt/x8f69ofe","slide":7,"text":"Buyer와 Seller가 Relay에 직접 연결합니다. 암호화된 payload와 인증 메타데이터만 전달하며, 방·역할·순번을 바꾼 패킷은 인증에 실패합니다.\n[Sources]\n- Local source: packages/room-relay/src/index.ts\n[/Sources]"}
+{"kind":"slide","id":"sl/gnmp4jqx","slide":8,"title":"공개 원장과 비공개 입력을 분리한다","textShapes":10}
+{"kind":"textbox","id":"sh/cb2tkvap","slide":8,"text":"공개 원장과 비공개 입력을 분리한다","textPreview":"공개 원장과 비공개 입력을 분리한다","textChars":19,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/dcbud0ra","slide":8,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/ydkbm5sv","slide":8,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/zedcfa9g","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/kzmdova1","slide":8,"bbox":[639.5,202,1,328]}
+{"kind":"textbox","id":"sh/l0vuh0rm","slide":8,"text":"공개 원장","textPreview":"공개 원장","textChars":5,"textLines":1,"bbox":[120,212,460,48]}
+{"kind":"textbox","id":"sh/eh0ba1sr","slide":8,"text":"가격 커밋값\n거래 진행 상태\n확정된 최종 가격","textPreview":"가격 커밋값 | 거래 진행 상태 | 확정된 최종 가격","textChars":25,"textLines":3,"bbox":[120,300,460,148]}
+{"kind":"textbox","id":"sh/fi9c369c","slide":8,"text":"검증 가능한 상태만 기록","textPreview":"검증 가능한 상태만 기록","textChars":13,"textLines":1,"bbox":[120,480,460,36]}
+{"kind":"textbox","id":"sh/baxkjqlk","slide":8,"text":"비공개 입력","textPreview":"비공개 입력","textChars":6,"textLines":1,"bbox":[700,212,460,48]}
+{"kind":"textbox","id":"sh/a9ojq5kz","slide":8,"text":"구매자 최대 한도\n판매자 최소 금액\n커밋용 난수 · 합의 가격","textPreview":"구매자 최대 한도 | 판매자 최소 금액 | 커밋용 난수 · 합의 가격","textChars":34,"textLines":3,"bbox":[700,300,460,148]}
+{"kind":"textbox","id":"sh/xcz2l03q","slide":8,"text":"원문은 각자의 로컬에 유지","textPreview":"원문은 각자의 로컬에 유지","textChars":14,"textLines":1,"bbox":[700,480,460,36]}
+{"kind":"textbox","id":"sh/cbq1sv25","slide":8,"text":"원문과 공개 상태가 같은 저장 공간에 놓이지 않는다.","textPreview":"원문과 공개 상태가 같은 저장 공간에 놓이지 않는다.","textChars":29,"textLines":1,"bbox":[220,574,840,36]}
+{"kind":"notes","id":"nt/gnmp4jqx","slide":8,"text":"ledger는 공개 계약 상태이고 witness는 proof 생성 시 로컬에서 제공되는 비공개 값입니다. KRW 범위를 위해 가격과 한도는 Uint64를 사용합니다.\n[Sources]\n- https://midnight.network/overview\n- Local source: packages/negotiation-contract/src/negotiation.compact\n[/Sources]"}
+{"kind":"slide","id":"sl/fu1gfa1s","slide":9,"title":"서로 신뢰하지 않는 두 당사자의 비공개 값 관계를 증명한다","textShapes":12}
+{"kind":"textbox","id":"sh/18byd4zy","slide":9,"text":"서로 신뢰하지 않는 두 당사자의 비공개 값 관계를 증명한다","textPreview":"서로 신뢰하지 않는 두 당사자의 비공개 값 관계를 증명한다","textChars":32,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/g72x4zyd","slide":9,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/ri9g7uhw","slide":9,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/6h0fypgb","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/tkby9kzm","slide":9,"bbox":[96,335,1088,0]}
+{"kind":"textbox","id":"sh/sjix0zy1","slide":9,"text":"구매자","textPreview":"구매자","textChars":3,"textLines":1,"bbox":[96,238,150,48]}
+{"kind":"textbox","id":"sh/je9g3ahk","slide":9,"text":"비공개 최대 한도","textPreview":"비공개 최대 한도","textChars":9,"textLines":1,"bbox":[250,238,280,48]}
+{"kind":"textbox","id":"sh/id0fu50z","slide":9,"text":"합의 가격 ≤ 최대 한도","textPreview":"합의 가격 ≤ 최대 한도","textChars":13,"textLines":1,"bbox":[540,238,390,48]}
+{"kind":"textbox","id":"sh/o7ydoret","slide":9,"text":"한도 공개 안 함","textPreview":"한도 공개 안 함","textChars":9,"textLines":1,"bbox":[950,238,220,48]}
+{"kind":"textbox","id":"sh/98rehwve","slide":9,"text":"판매자","textPreview":"판매자","textChars":3,"textLines":1,"bbox":[96,382,150,48]}
+{"kind":"textbox","id":"sh/m5gvmhwn","slide":9,"text":"비공개 최소 금액","textPreview":"비공개 최소 금액","textChars":9,"textLines":1,"bbox":[250,382,280,48]}
+{"kind":"textbox","id":"sh/n6pwfmd8","slide":9,"text":"최소 금액 ≤ 합의 가격","textPreview":"최소 금액 ≤ 합의 가격","textChars":13,"textLines":1,"bbox":[540,382,390,48]}
+{"kind":"textbox","id":"sh/0jydkreh","slide":9,"text":"한도 공개 안 함","textPreview":"한도 공개 안 함","textChars":9,"textLines":1,"bbox":[950,382,220,48]}
+{"kind":"textbox","id":"sh/1k7edwv2","slide":9,"text":"두 증명이 모두 통과하면 최종 가격만 공개한다.","textPreview":"두 증명이 모두 통과하면 최종 가격만 공개한다.","textChars":26,"textLines":1,"bbox":[220,532,840,44]}
+{"kind":"notes","id":"nt/fu1gfa1s","slide":9,"text":"Buyer는 합의 가격이 자기 최대 한도 이하임을, Seller는 자기 최소 금액 이상임을 증명합니다. 두 조건이 끝난 settle에서만 최종 가격을 공개합니다.\n[Sources]\n- Local source: packages/negotiation-contract/src/negotiation.compact\n[/Sources]"}
+{"kind":"slide","id":"sl/udsvah03","slide":10,"title":"가격은 거래 확정 때 한 번만 공개된다","textShapes":10}
+{"kind":"textbox","id":"sh/1cfmhgne","slide":10,"text":"가격은 거래 확정 때 한 번만 공개된다","textPreview":"가격은 거래 확정 때 한 번만 공개된다","textChars":21,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/0b65obm9","slide":10,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/nex4jq5k","slide":10,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/mdonql4z","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/9gzml0nq","slide":10,"bbox":[200,334,880,0]}
+{"kind":"shape","id":"sh/ofq5svm5","slide":10,"bbox":[213,327,14,14]}
+{"kind":"textbox","id":"sh/bih4na5w","slide":10,"text":"거래 개시","textPreview":"거래 개시","textChars":5,"textLines":1,"bbox":[110,214,220,42]}
+{"kind":"textbox","id":"sh/ah8nu54b","slide":10,"text":"거래 참여 완료","textPreview":"거래 참여 완료","textChars":8,"textLines":1,"bbox":[100,378,240,76]}
+{"kind":"shape","id":"sh/oza1gfyh","slide":10,"bbox":[633,327,14,14]}
+{"kind":"textbox","id":"sh/p0ji9kf2","slide":10,"text":"가격 조건 승인","textPreview":"가격 조건 승인","textChars":8,"textLines":1,"bbox":[530,214,220,42]}
+{"kind":"textbox","id":"sh/2xsjepgb","slide":10,"text":"조건 확인 완료\n금액 비공개","textPreview":"조건 확인 완료 | 금액 비공개","textChars":15,"textLines":2,"bbox":[520,378,240,76]}
+{"kind":"shape","id":"sh/3y107axw","slide":10,"bbox":[1053,327,14,14]}
+{"kind":"textbox","id":"sh/cnu1kzyd","slide":10,"text":"거래 확정","textPreview":"거래 확정","textChars":5,"textLines":1,"bbox":[950,214,220,42]}
+{"kind":"textbox","id":"sh/do3id4fy","slide":10,"text":"100,000 KRW 공개","textPreview":"100,000 KRW 공개","textChars":14,"textLines":1,"bbox":[940,378,240,76]}
+{"kind":"textbox","id":"sh/qlcjipgn","slide":10,"text":"협상 대화·중간 제안·한도·증명 내부 값은 관찰자에게 보이지 않는다.","textPreview":"협상 대화·중간 제안·한도·증명 내부 값은 관찰자에게 보이지 않는다.","textChars":38,"textLines":1,"bbox":[142,526,996,38]}
+{"kind":"notes","id":"nt/udsvah03","slide":10,"text":"Observer는 Indexer가 확인한 공개 상태만 표시합니다. AUTHORIZED에서는 금액이 없고, SETTLED에서 처음 최종 금액이 나타나는 대비가 핵심입니다.\n[Sources]\n- https://midnight.network/overview\n- Local source: packages/negotiation-contract/src/negotiation.compact\n- Local source: packages/observer-runtime/src/index.ts\n[/Sources]"}
+{"kind":"slide","id":"sl/m90b6t0r","slide":11,"title":"화면에는 비밀 대신 처리 상태만 보인다","textShapes":10}
+{"kind":"textbox","id":"sh/xc3mho32","slide":11,"text":"화면에는 비밀 대신 처리 상태만 보인다","textPreview":"화면에는 비밀 대신 처리 상태만 보인다","textChars":21,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/cbu58j2h","slide":11,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/zelojyl8","slide":11,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/ydcnatkn","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/l036l83y","slide":11,"bbox":[64,194,324,300]}
+{"kind":"textbox","id":"sh/kzu5c32t","slide":11,"text":"구매자","textPreview":"구매자","textChars":3,"textLines":1,"bbox":[88,218,276,34]}
+{"kind":"shape","id":"sh/725onyl4","slide":11,"bbox":[88,278,276,0]}
+{"kind":"textbox","id":"sh/m1cnetkj","slide":11,"text":"자기 한도\n자기 로컬 로그","textPreview":"자기 한도 | 자기 로컬 로그","textChars":14,"textLines":2,"bbox":[88,330,276,112]}
+{"kind":"shape","id":"sh/s7yt4b21","slide":11,"bbox":[446,194,324,300]}
+{"kind":"textbox","id":"sh/d87uxg3m","slide":11,"text":"판매자","textPreview":"판매자","textChars":3,"textLines":1,"bbox":[470,218,276,34]}
+{"kind":"shape","id":"sh/q5gb21kb","slide":11,"bbox":[470,278,276,0]}
+{"kind":"textbox","id":"sh/r6pcv6lw","slide":11,"text":"자기 한도\n자기 로컬 로그","textPreview":"자기 한도 | 자기 로컬 로그","textChars":14,"textLines":2,"bbox":[470,330,276,112]}
+{"kind":"shape","id":"sh/0bit8b2d","slide":11,"bbox":[828,194,324,300]}
+{"kind":"textbox","id":"sh/1cru1g3y","slide":11,"text":"관찰자","textPreview":"관찰자","textChars":3,"textLines":1,"bbox":[852,218,276,34]}
+{"kind":"shape","id":"sh/e9gb61k7","slide":11,"bbox":[852,278,276,0]}
+{"kind":"textbox","id":"sh/fapcz6ls","slide":11,"text":"공개 상태\n최종 가격","textPreview":"공개 상태 | 최종 가격","textChars":11,"textLines":2,"bbox":[852,330,276,112]}
+{"kind":"textbox","id":"sh/ozitcv29","slide":11,"text":"비공개  ·  증명  ·  최종 공개","textPreview":"비공개  ·  증명  ·  최종 공개","textChars":20,"textLines":1,"bbox":[350,540,580,42]}
+{"kind":"notes","id":"nt/m90b6t0r","slide":11,"text":"세 패널은 단순한 시각 장식이 아니라 세 신뢰 경계를 한 화면에 놓은 것입니다. 색은 문장 전체가 아니라 비공개·증명·최종 공개 토큰에만 사용합니다.\n[Sources]\n- Local source: .calm-design/DESIGN.md\n- Local source: apps/demo-web/\n[/Sources]"}
+{"kind":"slide","id":"sl/jetc3ut0","slide":12,"title":"데모 영상","textShapes":3}
+{"kind":"textbox","id":"sh/72t03qp0","slide":12,"text":"데모 영상","textPreview":"데모 영상","textChars":5,"textLines":1,"bbox":[64,42,900,54]}
+{"kind":"shape","id":"sh/wbih4b6d","slide":12,"bbox":[264,134,752,512]}
+{"kind":"shape","id":"sh/250zy18b","slide":12,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/98rytw72","slide":12,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/o7ih0r6h","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"image","id":"im/nml0bqh8","slide":12,"name":"","bbox":[280,150,720,480]}
+{"kind":"notes","id":"nt/jetc3ut0","slide":12,"text":"Happy path는 Buyer 110,000원, Seller 90,000원입니다. 양쪽 자기 한도는 자기 패널에만 보이고, Observer는 AUTHORIZED에서 금액 없이 기다린 뒤 SETTLED에서만 100,000원을 보여줍니다.\n[Sources]\n- Local screenshot: /Users/taemin/Desktop/스크린샷 2026-07-26 오전 7.25.03.png\n- Local source: apps/demo-web/\n[/Sources]"}
+{"kind":"slide","id":"sl/8f2psfyx","slide":13,"title":"세 단계로 안전성을 확인했다","textShapes":12}
+{"kind":"textbox","id":"sh/1gbm9s3a","slide":13,"text":"세 단계로 안전성을 확인했다","textPreview":"세 단계로 안전성을 확인했다","textChars":15,"textLines":1,"bbox":[64,52,1110,68]}
+{"kind":"shape","id":"sh/0f2lgnmp","slide":13,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/ra943il8","slide":13,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/q903ad4n","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/dcbm583y","slide":13,"bbox":[449.5,204,1,334]}
+{"kind":"shape","id":"sh/sb2lcnmd","slide":13,"bbox":[827.5,204,1,334]}
+{"kind":"textbox","id":"sh/b6d4f2lc","slide":13,"text":"36","textPreview":"36","textChars":2,"textLines":1,"bbox":[96,208,300,88]}
+{"kind":"textbox","id":"sh/a543mx4r","slide":13,"text":"실행 환경 검사","textPreview":"실행 환경 검사","textChars":8,"textLines":1,"bbox":[96,300,300,36]}
+{"kind":"shape","id":"sh/wvupgz6t","slide":13,"bbox":[96,350,300,0]}
+{"kind":"textbox","id":"sh/xw3q94ne","slide":13,"text":"역할별 프로세스 분리\n각자의 한도 정책 검사","textPreview":"역할별 프로세스 분리 | 각자의 한도 정책 검사","textChars":24,"textLines":2,"bbox":[96,382,300,112]}
+{"kind":"textbox","id":"sh/atc7epon","slide":13,"text":"8","textPreview":"8","textChars":1,"textLines":1,"bbox":[474,208,300,88]}
+{"kind":"textbox","id":"sh/bulo7u58","slide":13,"text":"화면 동작 검사","textPreview":"화면 동작 검사","textChars":8,"textLines":1,"bbox":[474,300,300,36]}
+{"kind":"shape","id":"sh/orapcf6h","slide":13,"bbox":[474,350,300,0]}
+{"kind":"textbox","id":"sh/9sj65kn2","slide":13,"text":"입력·로그·상태 흐름\n비공개 표시 확인","textPreview":"입력·로그·상태 흐름 | 비공개 표시 확인","textChars":21,"textLines":2,"bbox":[474,382,300,112]}
+{"kind":"textbox","id":"sh/mps7a5or","slide":13,"text":"5","textPreview":"5","textChars":1,"textLines":1,"bbox":[852,208,300,88]}
+{"kind":"textbox","id":"sh/nq1o3a5w","slide":13,"text":"증명 회로 검사","textPreview":"증명 회로 검사","textChars":8,"textLines":1,"bbox":[852,300,300,36]}
+{"kind":"shape","id":"sh/0nap8f6l","slide":13,"bbox":[852,350,300,0]}
+{"kind":"textbox","id":"sh/1oj61kn6","slide":13,"text":"비공개 값 관계 증명\n최종 가격 공개 시점 확인","textPreview":"비공개 값 관계 증명 | 최종 가격 공개 시점 확인","textChars":26,"textLines":2,"bbox":[852,382,300,112]}
+{"kind":"notes","id":"nt/8f2psfyx","slide":13,"text":"성공 결과만 보지 않고 비밀 필드가 request, IPC, Relay, Observer에 나타나지 않는지 함께 검사합니다. 실제 OpenAI endpoint에는 도달했지만 프로젝트 quota 때문에 모델 후보 품질은 아직 재검증이 필요합니다.\n[Sources]\n- Local source: package test suites under packages/*/test and apps/demo-web/\n- Local source: scripts/test-openai-negotiation.mjs\n[/Sources]"}
+{"kind":"slide","id":"sl/hgzapcr6","slide":14,"title":"추후 계획","textShapes":15}
+{"kind":"textbox","id":"sh/q50nydsj","slide":14,"text":"추후 계획\n비밀이 닿는 범위를 더 줄인다","textPreview":"추후 계획 | 비밀이 닿는 범위를 더 줄인다","textChars":22,"textLines":2,"bbox":[64,132,900,118]}
+{"kind":"shape","id":"sh/kjmxsfm1","slide":14,"bbox":[64,674,1152,0]}
+{"kind":"textbox","id":"sh/cnqh8fux","slide":14,"text":"비공개 협상 데모","textPreview":"비공개 협상 데모","textChars":9,"textLines":1,"bbox":[64,685,360,18]}
+{"kind":"textbox","id":"sh/xozyhkbi","slide":14,"text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1160,684,56,18]}
+{"kind":"shape","id":"sh/bmhgfatc","slide":14,"bbox":[96,392,1088,0]}
+{"kind":"shape","id":"sh/oz6x4vul","slide":14,"bbox":[96,484,1088,0]}
+{"kind":"textbox","id":"sh/p0zyd0b6","slide":14,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[96,324,54,44]}
+{"kind":"textbox","id":"sh/2xof2lcv","slide":14,"text":"실제 AI 협상 품질 재검증","textPreview":"실제 AI 협상 품질 재검증","textChars":15,"textLines":1,"bbox":[168,324,500,44]}
+{"kind":"textbox","id":"sh/3yxgbqdg","slide":14,"text":"API 한도 복구 후","textPreview":"API 한도 복구 후","textChars":11,"textLines":1,"bbox":[692,324,300,44]}
+{"kind":"textbox","id":"sh/8vahgzu5","slide":14,"text":"AI","textPreview":"AI","textChars":2,"textLines":1,"bbox":[1010,324,150,44]}
+{"kind":"textbox","id":"sh/9wjyp4bq","slide":14,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[96,416,54,44]}
+{"kind":"textbox","id":"sh/jqlkfyds","slide":14,"text":"공개 Midnight 네트워크 배포","textPreview":"공개 Midnight 네트워크 배포","textChars":19,"textLines":1,"bbox":[168,416,500,44]}
+{"kind":"textbox","id":"sh/ipcjmtw7","slide":14,"text":"탐색기에서 거래 확인","textPreview":"탐색기에서 거래 확인","textChars":11,"textLines":1,"bbox":[692,416,300,44]}
+{"kind":"textbox","id":"sh/5cn2h8vy","slide":14,"text":"Midnight","textPreview":"Midnight","textChars":8,"textLines":1,"bbox":[1010,416,150,44]}
+{"kind":"textbox","id":"sh/4re1o3ed","slide":14,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[96,508,54,44]}
+{"kind":"textbox","id":"sh/re5kjydo","slide":14,"text":"로컬·전용 AI 연결","textPreview":"로컬·전용 AI 연결","textChars":11,"textLines":1,"bbox":[168,508,500,44]}
+{"kind":"textbox","id":"sh/6dwjqtw3","slide":14,"text":"외부 제공자 의존 축소","textPreview":"외부 제공자 의존 축소","textChars":12,"textLines":1,"bbox":[692,508,300,44]}
+{"kind":"textbox","id":"sh/tgn2l8vu","slide":14,"text":"로컬","textPreview":"로컬","textChars":2,"textLines":1,"bbox":[1010,508,150,44]}
+{"kind":"image","id":"im/pcvy1cr2","slide":14,"name":"","bbox":[64,43.58,170,36.84]}
+{"kind":"notes","id":"nt/hgzapcr6","slide":14,"text":"마지막 문장: 우리는 AI에게 비밀을 맡기지 않았습니다. AI는 후보를 만들고, 로컬 정책이 결정하며, Midnight가 결과를 증명합니다.\n[Sources]\n- https://midnight.network/overview\n- Local source: packages/agent-core/src/index.ts\n[/Sources]"}

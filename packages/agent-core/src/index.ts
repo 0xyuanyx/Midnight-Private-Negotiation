@@ -9,6 +9,7 @@ export type PublicNegotiationContext = {
   role: AgentRole;
   productCode: string;
   round: number;
+  publicReferencePrice?: string;
   currentOffer?: PublicOffer;
 };
 
@@ -28,13 +29,21 @@ export type NegotiationModelRequest = {
   store: false;
 };
 
+export type OpenAIResponsesProviderOptions = {
+  apiKey: string;
+  model?: string;
+  endpoint?: string;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+};
+
 export type LocalPolicy =
   | { role: "buyer"; maximumPrice: bigint }
   | { role: "seller"; minimumPrice: bigint };
 
 const MAX_KRW = 18_446_744_073_709_551_615n;
 const MAX_CANDIDATES = 5;
-export const NEGOTIATION_PROMPT_VERSION = "2026-07-26.v1";
+export const NEGOTIATION_PROMPT_VERSION = "2026-07-26.v2";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -67,7 +76,7 @@ const validatePublicContext = (
     !hasExactKeys(
       value,
       ["role", "productCode", "round"],
-      ["currentOffer"],
+      ["publicReferencePrice", "currentOffer"],
     ) ||
     (value.role !== "buyer" && value.role !== "seller") ||
     typeof value.productCode !== "string" ||
@@ -77,6 +86,13 @@ const validatePublicContext = (
     value.round > 10
   ) {
     throw new Error("invalid public negotiation context");
+  }
+
+  if (
+    value.publicReferencePrice !== undefined &&
+    parsePrice(value.publicReferencePrice) === undefined
+  ) {
+    throw new Error("invalid public negotiation reference price");
   }
 
   if (value.currentOffer !== undefined) {
@@ -99,7 +115,8 @@ const COMMON_NEGOTIATION_INSTRUCTIONS = `
 당신은 거래를 확정하거나 정책을 집행하지 않는다. 공개 협상 정보만 보고 다음 행동 후보를 만들며, 실제 전송·수락 가능 여부는 각 사용자 기기 안의 로컬 PolicyGuard가 최종 결정한다.
 
 [절대적인 신뢰 경계]
-- 입력으로 허용되는 정보는 role, productCode, round, currentOffer뿐이다.
+- 입력으로 허용되는 정보는 role, productCode, round, publicReferencePrice, currentOffer뿐이다.
+- publicReferencePrice는 상품의 공개 기준가이며 어느 당사자의 비공개 한도도 아니다.
 - 구매자 최대 한도, 판매자 최소 금액, commitment 난수, 비밀키, 지갑 정보, PolicyGuard 판정, 폐기된 후보, 폐기 횟수, 재요청 횟수는 알 수 없으며 요청하거나 추측해서도 안 된다.
 - 이전 응답이나 숨겨진 대화 상태가 존재한다고 가정하지 않는다. 매 요청은 완전히 독립적인 stateless 요청이다.
 - 현재 요청에 없는 정보와 상대방의 비공개 조건을 만들어내거나 사실처럼 표현하지 않는다.
@@ -165,6 +182,9 @@ export const createNegotiationModelRequest = (
     role: context.role,
     productCode: context.productCode,
     round: context.round,
+    ...(context.publicReferencePrice === undefined
+      ? {}
+      : { publicReferencePrice: context.publicReferencePrice }),
     ...(context.currentOffer === undefined
       ? {}
       : {
@@ -200,6 +220,122 @@ const validateCandidates = (
   return value;
 };
 
+const NEGOTIATION_CANDIDATE_SCHEMA = {
+  type: "object",
+  properties: {
+    candidates: {
+      type: "array",
+      minItems: 1,
+      maxItems: MAX_CANDIDATES,
+      items: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["offer", "accept"] },
+          price: { type: "string", pattern: "^[1-9][0-9]{0,19}$" },
+        },
+        required: ["action", "price"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["candidates"],
+  additionalProperties: false,
+} as const;
+
+const extractResponseOutputText = (value: unknown): string => {
+  if (
+    !isRecord(value) ||
+    value.status !== "completed" ||
+    !Array.isArray(value.output)
+  ) {
+    throw new Error("OpenAI response did not complete");
+  }
+
+  const outputText = value.output
+    .flatMap((item) =>
+      isRecord(item) && item.type === "message" && Array.isArray(item.content)
+        ? item.content
+        : [],
+    )
+    .filter(
+      (part): part is Record<string, unknown> =>
+        isRecord(part) &&
+        part.type === "output_text" &&
+        typeof part.text === "string",
+    )
+    .map((part) => part.text as string)
+    .join("");
+  if (outputText.length === 0) {
+    throw new Error("OpenAI response did not contain output text");
+  }
+  return outputText;
+};
+
+export const createOpenAIResponsesProvider = (
+  options: OpenAIResponsesProviderOptions,
+): CandidateProvider => {
+  if (typeof options.apiKey !== "string" || options.apiKey.trim().length === 0) {
+    throw new Error("OpenAI API key is required");
+  }
+  const model = options.model?.trim() || "gpt-5.6-sol";
+  const endpoint =
+    options.endpoint?.trim() || "https://api.openai.com/v1/responses";
+  const timeoutMs = options.timeoutMs ?? 45_000;
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000 || timeoutMs > 120_000) {
+    throw new Error("OpenAI request timeout must be between 1000 and 120000 ms");
+  }
+  const fetchImpl = options.fetchImpl ?? fetch;
+
+  return {
+    async generateCandidates(
+      context: PublicNegotiationContext,
+    ): Promise<readonly NegotiationCandidate[]> {
+      const request = createNegotiationModelRequest(context);
+      const response = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${options.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          instructions: request.instructions,
+          input: request.input,
+          store: request.store,
+          reasoning: { effort: "low" },
+          max_output_tokens: 700,
+          text: {
+            format: {
+              type: "json_schema",
+              name: "negotiation_candidates",
+              strict: true,
+              schema: NEGOTIATION_CANDIDATE_SCHEMA,
+            },
+          },
+        }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) {
+        throw new Error(`OpenAI Responses request failed with ${response.status}`);
+      }
+
+      const parsed = JSON.parse(
+        extractResponseOutputText(await response.json()),
+      ) as unknown;
+      if (
+        !isRecord(parsed) ||
+        !hasExactKeys(parsed, ["candidates"]) ||
+        !Array.isArray(parsed.candidates)
+      ) {
+        throw new Error("OpenAI response has an invalid candidate envelope");
+      }
+      return validateCandidates(
+        parsed.candidates as readonly NegotiationCandidate[],
+      );
+    },
+  };
+};
+
 const scalePrice = (price: bigint, basisPoints: bigint): string => {
   const scaled = (price * basisPoints) / 10_000n;
   const safe = scaled < 1n ? 1n : scaled > MAX_KRW ? MAX_KRW : scaled;
@@ -221,10 +357,10 @@ const uniqueCandidates = (
 export const createDeterministicMockProvider = (
   options: { publicReferencePriceKrw?: string } = {},
 ): CandidateProvider => {
-  const referencePrice = parsePrice(
+  const defaultReferencePrice = parsePrice(
     options.publicReferencePriceKrw ?? "100000",
   );
-  if (referencePrice === undefined) {
+  if (defaultReferencePrice === undefined) {
     throw new Error("mock reference price must be a positive uint64 amount");
   }
 
@@ -233,6 +369,13 @@ export const createDeterministicMockProvider = (
       rawContext: PublicNegotiationContext,
     ): Promise<readonly NegotiationCandidate[]> {
       const context = validatePublicContext(rawContext);
+      const referencePrice =
+        context.publicReferencePrice === undefined
+          ? defaultReferencePrice
+          : parsePrice(context.publicReferencePrice);
+      if (referencePrice === undefined) {
+        throw new Error("mock reference price must be a positive uint64 amount");
+      }
       if (context.currentOffer === undefined) {
         if (context.role !== "buyer") {
           throw new Error("only Buyer can create the opening mock offer");
@@ -266,6 +409,37 @@ export const createDeterministicMockProvider = (
       ]);
     },
   };
+};
+
+export const createCandidateProviderFromEnvironment = (
+  options: {
+    environment?: Readonly<Record<string, string | undefined>>;
+    fetchImpl?: typeof fetch;
+  } = {},
+): CandidateProvider => {
+  const environment = options.environment ?? process.env;
+  const provider = environment.NEGOTIATION_AI_PROVIDER?.trim() || "mock";
+  const publicReferencePriceKrw =
+    environment.NEGOTIATION_REFERENCE_PRICE_KRW?.trim() || "100000";
+
+  if (provider === "mock") {
+    return createDeterministicMockProvider({ publicReferencePriceKrw });
+  }
+  if (provider !== "openai") {
+    throw new Error(`unsupported negotiation AI provider: ${provider}`);
+  }
+
+  const apiKey =
+    environment.OPENAI_API_KEY?.trim() ||
+    environment.MEMO_OPENAI_API_KEY?.trim();
+  if (apiKey === undefined || apiKey.length === 0) {
+    throw new Error("OpenAI API key is required for the openai provider");
+  }
+  return createOpenAIResponsesProvider({
+    apiKey,
+    model: environment.OPENAI_NEGOTIATION_MODEL?.trim() || "gpt-5.6-sol",
+    ...(options.fetchImpl === undefined ? {} : { fetchImpl: options.fetchImpl }),
+  });
 };
 
 export const policyAllows = (
@@ -315,6 +489,9 @@ export const generateAllowedCandidate = async (input: {
         role: context.role,
         productCode: context.productCode,
         round: context.round,
+        ...(context.publicReferencePrice === undefined
+          ? {}
+          : { publicReferencePrice: context.publicReferencePrice }),
         ...(context.currentOffer === undefined
           ? {}
           : {

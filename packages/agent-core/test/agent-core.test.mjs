@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildNegotiationAgentInstructions,
+  createCandidateProviderFromEnvironment,
   createNegotiationModelRequest,
   createDeterministicMockProvider,
+  createOpenAIResponsesProvider,
   generateAllowedCandidate,
   generateLocalFallbackCandidate,
   NEGOTIATION_PROMPT_VERSION,
@@ -38,6 +40,7 @@ test("model request contains only validated public context and disables response
     role: "buyer",
     productCode: "4821",
     round: 3,
+    publicReferencePrice: "100000",
     currentOffer: { maker: "seller", price: "105000" },
   });
 
@@ -46,12 +49,180 @@ test("model request contains only validated public context and disables response
     role: "buyer",
     productCode: "4821",
     round: 3,
+    publicReferencePrice: "100000",
     currentOffer: { maker: "seller", price: "105000" },
   });
   assert.equal(request.input.includes("maximumPrice"), false);
   assert.equal(request.input.includes("minimumPrice"), false);
   assert.equal(request.input.includes("commitment"), false);
   assert.equal(request.input.includes("PolicyGuard"), false);
+});
+
+test("OpenAI Responses provider sends a stateless structured request and parses candidates", async () => {
+  let captured;
+  const provider = createOpenAIResponsesProvider({
+    apiKey: "test-api-key",
+    model: "gpt-test",
+    fetchImpl: async (url, init) => {
+      captured = {
+        url: String(url),
+        method: init?.method,
+        headers: init?.headers,
+        body: JSON.parse(String(init?.body)),
+      };
+      return new Response(
+        JSON.stringify({
+          id: "resp_test",
+          object: "response",
+          status: "completed",
+          output: [
+            {
+              id: "msg_test",
+              type: "message",
+              status: "completed",
+              role: "assistant",
+              content: [
+                {
+                  type: "output_text",
+                  text: JSON.stringify({
+                    candidates: [
+                      { action: "offer", price: "100000" },
+                      { action: "offer", price: "95000" },
+                    ],
+                  }),
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        },
+      );
+    },
+  });
+
+  const candidates = await provider.generateCandidates({
+    role: "buyer",
+    productCode: "4821",
+    round: 1,
+    publicReferencePrice: "100000",
+  });
+
+  assert.deepEqual(candidates, [
+    { action: "offer", price: "100000" },
+    { action: "offer", price: "95000" },
+  ]);
+  assert.equal(captured.url, "https://api.openai.com/v1/responses");
+  assert.equal(captured.method, "POST");
+  assert.equal(captured.headers.Authorization, "Bearer test-api-key");
+  assert.equal(captured.body.model, "gpt-test");
+  assert.equal(captured.body.store, false);
+  assert.deepEqual(captured.body.reasoning, { effort: "low" });
+  assert.equal(captured.body.previous_response_id, undefined);
+  assert.equal(captured.body.conversation, undefined);
+  assert.deepEqual(captured.body.text.format, {
+    type: "json_schema",
+    name: "negotiation_candidates",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        candidates: {
+          type: "array",
+          minItems: 1,
+          maxItems: 5,
+          items: {
+            type: "object",
+            properties: {
+              action: { type: "string", enum: ["offer", "accept"] },
+              price: { type: "string", pattern: "^[1-9][0-9]{0,19}$" },
+            },
+            required: ["action", "price"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["candidates"],
+      additionalProperties: false,
+    },
+  });
+  assert.deepEqual(JSON.parse(captured.body.input), {
+    role: "buyer",
+    productCode: "4821",
+    round: 1,
+    publicReferencePrice: "100000",
+  });
+  const serializedInput = captured.body.input;
+  assert.equal(serializedInput.includes("maximumPrice"), false);
+  assert.equal(serializedInput.includes("minimumPrice"), false);
+  assert.equal(serializedInput.includes("commitment"), false);
+  assert.equal(captured.body.instructions.includes("PolicyGuard 판정"), true);
+  assert.equal(serializedInput.includes("110000"), false);
+  assert.equal(serializedInput.includes("90000"), false);
+});
+
+test("configured provider activates OpenAI only when explicitly requested", async () => {
+  let authorization;
+  const provider = createCandidateProviderFromEnvironment({
+    environment: {
+      NEGOTIATION_AI_PROVIDER: "openai",
+      MEMO_OPENAI_API_KEY: "memo-test-key",
+      OPENAI_NEGOTIATION_MODEL: "gpt-configured",
+    },
+    fetchImpl: async (_url, init) => {
+      authorization = init?.headers.Authorization;
+      return new Response(
+        JSON.stringify({
+          id: "resp_configured",
+          object: "response",
+          status: "completed",
+          output: [
+            {
+              id: "msg_configured",
+              type: "message",
+              status: "completed",
+              role: "assistant",
+              content: [
+                {
+                  type: "output_text",
+                  text: '{"candidates":[{"action":"offer","price":"100000"}]}',
+                  annotations: [],
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    },
+  });
+
+  const candidates = await provider.generateCandidates({
+    role: "buyer",
+    productCode: "1111",
+    round: 1,
+    publicReferencePrice: "100000",
+  });
+  assert.equal(authorization, "Bearer memo-test-key");
+  assert.deepEqual(candidates, [{ action: "offer", price: "100000" }]);
+
+  assert.throws(
+    () =>
+      createCandidateProviderFromEnvironment({
+        environment: { NEGOTIATION_AI_PROVIDER: "openai" },
+      }),
+    /API key/,
+  );
+  assert.throws(
+    () =>
+      createCandidateProviderFromEnvironment({
+        environment: { NEGOTIATION_AI_PROVIDER: "unknown" },
+      }),
+    /provider/,
+  );
 });
 
 test("model request rejects private fields instead of silently forwarding them", () => {
