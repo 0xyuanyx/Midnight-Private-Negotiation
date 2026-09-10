@@ -8,7 +8,7 @@
 
 - Buyer, Seller, Observer를 한 화면의 세 패널로 구성
 - Buyer와 Seller가 동일한 4자리 상품 코드로 협상방에 참여
-- 각 역할의 한도와 commitment randomness는 역할별 로컬 private state에만 저장
+- 각 역할의 한도와 commitment randomness는 역할별 로컬 private state에서 관리하며, 한도 입력은 아래 로컬 Controller 신뢰 경계를 거쳐 전달
 - GPT에는 정확한 한도를 전달하지 않고 공개 기준가·현재 제안·협상 맥락만 전달
 - 로컬 `PolicyGuard`가 후보 제안이 역할별 한도 안에 있는지 검사
 - 역할 간 협상 메시지는 Room Relay를 통해 암호문으로 전달
@@ -48,13 +48,35 @@ Midnight 로컬 체인 모드에서는 Buyer가 계약을 배포하고, Seller�
 
 ## GPT 역할과 비공개 경계
 
+이 데모에서 브라우저와 로컬 Demo Controller는 신뢰 경계 안에 있습니다. 입력한 한도는 `ws://127.0.0.1:8787`로 Controller에 평문 전달되고, Controller가 대상 역할 프로세스에 IPC로 전달합니다. Controller는 이 값을 저장하거나 로그에 남기지 않지만 전달 중에는 평문을 취급합니다. 브라우저에서 역할 프로세스까지 종단 간 암호화되는 구조는 아닙니다. 한도 원문은 GPT, Room Relay, 공개 Ledger에는 전달하지 않습니다. 브라우저에는 각 역할의 입력값이 표시되므로 현재 한 화면의 데모를 서로 신뢰하지 않는 사용자를 위한 분리된 클라이언트로 해석해서는 안 됩니다.
+
 Buyer와 Seller는 서로 다른 상세 역할 지침을 사용합니다. Buyer는 공개된 Seller 제안에서 수락 후보와 점진적으로 낮은 counter offer 후보를 만들고, Seller는 공개된 Buyer 제안에서 수락 후보와 점진적으로 높은 counter offer 후보를 만듭니다. 양쪽 모두 한 후보만 고집하지 않고 최대 다섯 후보를 만들어 불필요한 조기 결렬 가능성을 낮춥니다.
 
 GPT 요청에는 `role`, `productCode`, `round`, `publicReferencePrice`, `currentOffer`만 들어갑니다. `publicReferencePrice`는 첫 제안을 만들기 위한 공개 상품 기준가이며 어느 역할의 비공개 한도도 아닙니다. 한도, commitment 난수, 비밀키, 지갑 정보, PolicyGuard 판정, 폐기 후보와 재시도 횟수는 포함하지 않습니다. GPT는 `최종 제안`, `마지노선`, `더는 양보할 수 없음`처럼 비공개 경계를 암시하는 표현도 생성하지 않으며, 후보가 거절되면 같은 공개 입력으로 완전히 새로운 stateless 요청을 수행합니다.
 
-실제 어댑터는 OpenAI Responses API와 strict Structured Outputs를 사용합니다. 모든 요청은 `store: false`이고 이전 response ID나 conversation을 사용하지 않습니다. 단, `store: false`는 요청 단위 application state 저장을 끄는 설정이며 조직 단위 Zero Data Retention과 동일한 보장은 아닙니다. 실제 provider는 `NEGOTIATION_AI_PROVIDER=openai`일 때만 활성화되므로 기본 명령에서는 API 호출과 비용이 발생하지 않습니다. API 오류, 시간 초과, 잘못된 후보 또는 정책을 통과하지 못한 후보는 외부 로그 없이 폐기되고 역할 런타임의 로컬 fallback으로 전환됩니다.
+실제 어댑터는 OpenAI Responses API와 strict Structured Outputs를 사용합니다. 모든 요청은 `store: false`이고 이전 response ID나 conversation을 사용하지 않습니다. 단, `store: false`는 요청 단위 application state 저장을 끄는 설정이며 조직 단위 Zero Data Retention과 동일한 보장은 아닙니다. 기본 데모 명령은 실제 OpenAI provider를 활성화하므로 API 호출과 비용이 발생합니다. API 오류, 시간 초과, 잘못된 후보 또는 정책을 통과하지 못한 후보는 외부 로그 없이 폐기되고 역할 런타임의 로컬 fallback으로 전환됩니다. API 호출 없이 확인하려면 `demo:mock` 또는 `demo:midnight:mock`을 사용합니다.
+
+## 최초 설치
+
+검증 환경은 macOS arm64, Node `24.14.1`, npm `11.11.0`, Compact CLI `0.5.1`, Compact compiler `0.31.1`입니다. package.json의 Node 최소 요구사항은 `22.13.0`이지만 다른 Node 버전과 OS는 별도 검증이 필요합니다. `node`, `npm`, `compact`가 PATH에 있는 환경에서 시작합니다. 실제 체인 모드에는 실행 중인 Docker와 Docker Compose도 필요합니다.
+
+```bash
+git clone https://github.com/0xyuanyx/Midnight-Private-Negotiation.git
+cd Midnight-Private-Negotiation
+compact update 0.31.1 --no-set-default
+compact compile +0.31.1 --version
+npm run bootstrap
+npm run typecheck
+npm test
+npm --prefix apps/demo-web ci
+npm --prefix apps/demo-web test
+```
+
+`bootstrap`은 lockfile 기반 설치 → 계약 컴파일 → 생성물 복사 → TypeScript 빌드를 수행합니다. 계약 스크립트는 전역 기본 버전과 관계없이 compiler `0.31.1`을 사용하며 계약 runtime은 `0.16.0`입니다. `managed/`, `dist/`, `node_modules/`는 Git에 포함하지 않습니다. 새 클론에서는 `bootstrap`을 먼저 실행해야 합니다. 웹은 루트 workspace에 포함되지 않아 별도 설치가 필요합니다. 최초 설치와 위 테스트에는 OpenAI 키나 Docker가 필요하지 않습니다.
 
 ## 로컬 DApp 실행
+
+위 최초 설치를 마친 뒤 실행합니다.
 
 터미널 1:
 
@@ -71,9 +93,15 @@ npm run dev -- --port 3001
 
 그다음 `http://localhost:3001/`에서 Buyer와 Seller가 같은 상품 코드를 입력하고 각자 한도를 입력합니다. 기본 WebSocket 주소는 `ws://127.0.0.1:8787`입니다.
 
+`demo:controller`는 실제 OpenAI 협상을 기본으로 사용합니다. API 호출 없이 로컬 후보 생성기로 확인할 때는 다음 명령을 사용합니다.
+
+```bash
+npm run demo:mock
+```
+
 ## 실제 Midnight 로컬 체인 모드
 
-최초 실행 또는 Compact 계약 변경 후에는 설치된 Compact compiler로 생성물을 준비합니다. `managed/` 생성물은 저장소에 커밋하지 않습니다.
+최초 실행에는 위 `bootstrap`을 사용합니다. Compact 계약 변경 후에는 고정된 compiler `0.31.1`로 생성물을 다시 준비합니다. 이후 데모 명령의 build 단계가 자산을 복사합니다.
 
 ```bash
 npm run contract:compile
@@ -85,11 +113,13 @@ npm run contract:compile
 npm run midnight:up
 ```
 
-터미널 2에서는 mock 공개 상태 대신 실제 Midnight 계약과 Indexer를 사용하는 Controller를 실행합니다.
+터미널 2에서는 실제 Midnight 계약과 Indexer, OpenAI 협상을 사용하는 Controller를 실행합니다.
 
 ```bash
 npm run demo:midnight
 ```
+
+API 호출 없이 Midnight 연결만 확인할 때는 `npm run demo:midnight:mock`을 사용합니다.
 
 터미널 3에서는 위와 동일하게 웹을 실행합니다. 웹의 WebSocket 주소는 바뀌지 않으므로 기존 3패널 화면이 실제 체인 이벤트를 그대로 받습니다.
 
@@ -104,13 +134,13 @@ npm run dev -- --port 3001
 npm run midnight:down
 ```
 
-## 실제 OpenAI 협상 모드
+## 실제 OpenAI 협상 설정
 
-셸에 `MEMO_OPENAI_API_KEY` 또는 `OPENAI_API_KEY`가 설정되어 있어야 합니다. 기본 모델은 `gpt-5.6-sol`, 공개 기준가는 `100000` KRW이며 환경 변수로 변경할 수 있습니다.
+기본 데모를 실행하기 전에 셸에 `MEMO_OPENAI_API_KEY` 또는 `OPENAI_API_KEY`가 설정되어 있어야 합니다. 기본 모델은 `gpt-5.6-sol`, 공개 기준가는 `100000` KRW이며 환경 변수로 변경할 수 있습니다.
 
 ```bash
 source ~/.zshrc
-npm run demo:ai
+npm run demo:controller
 ```
 
 Midnight 로컬 체인과 실제 OpenAI provider를 함께 사용할 때:
@@ -118,7 +148,7 @@ Midnight 로컬 체인과 실제 OpenAI provider를 함께 사용할 때:
 ```bash
 source ~/.zshrc
 npm run midnight:up
-npm run demo:midnight:ai
+npm run demo:midnight
 ```
 
 선택 설정:
@@ -137,7 +167,7 @@ npm run test:openai
 
 2026-07-26 로컬 검증에서는 요청이 OpenAI까지 도달했지만 API 프로젝트가 `429 insufficient_quota`를 반환해 실제 모델 후보의 협상 품질 평가는 완료하지 못했습니다. 같은 OpenAI 실행 모드에서 API 실패가 로컬 fallback으로 전환되고 전체 Buyer·Seller·Observer 흐름이 `SETTLED`까지 완료되는 것은 확인했습니다. 할당량 복구 후 `npm run test:openai`를 다시 실행하면 실제 모델 선택이 한 번도 없을 경우 실패하도록 구성되어 있습니다.
 
-검증 상태를 발표에서 혼동하지 않도록 다음처럼 구분합니다.
+아래 표는 2026-07-26에 기록한 검증 상태입니다. 현재 코드의 실제 AI 응답과 온체인 정산을 다시 검증했다는 의미는 아닙니다. 2026-09-09 점검에서는 실제 AI 호출을 수행하지 않았고, Docker 시작 오류로 실제 체인 검증은 보류했습니다.
 
 | 검증 대상 | 상태 | 확인 내용 |
 |---|---|---|
@@ -151,7 +181,7 @@ npm run test:openai
 ## v2 기반 검증
 
 ```bash
-npm install
+npm run bootstrap
 npm run typecheck
 npm test
 ```
@@ -162,6 +192,7 @@ npm test
 
 ```bash
 cd apps/demo-web
+npm ci
 npm test
 ```
 

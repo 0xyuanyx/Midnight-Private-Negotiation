@@ -2,6 +2,10 @@
 node_modules/
 dist/
 build/
+# This build plugin is source code required by vite.config.ts.
+!/apps/demo-web/build/
+/apps/demo-web/build/*
+!/apps/demo-web/build/sites-vite-plugin.ts
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
