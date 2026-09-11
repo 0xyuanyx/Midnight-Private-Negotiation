@@ -1,6 +1,6 @@
 # 본사 리뷰 대조 및 새 클론 실행 검증
 
-2026-09-09에 Private Negotiation의 본사 리뷰 5개 항목과 새 클론 실행을 확인했다. 초기 점검에서 발견한 bootstrap 및 웹 빌드 문제를 아래 후속 반영으로 수정했다. 실제 OpenAI 응답과 온체인 정산은 이번 검증의 통과 범위에 포함하지 않는다.
+2026-09-09에 Private Negotiation의 본사 리뷰 5개 항목과 새 클론 실행을 확인했다. 초기 점검에서 발견한 bootstrap 및 웹 빌드 문제를 아래 후속 반영으로 수정했다. 실제 OpenAI 응답과 온체인 정산은 2026-09-11 후속 검증에서 별도로 확인했다.
 
 ## 후속 반영 및 재검증
 
@@ -40,11 +40,11 @@
 
 | 항목 | 상태 | 근거와 남은 작업 |
 |---|---|---|
-| 계약 runtime 0.15.0 → 0.16.0 | 현재 수정본에서 해결, 미커밋 | 커밋본은 compiler 0.31.1 생성물 로드 시 version mismatch 재현. 현재 수정본 계약 테스트 4/4 통과. package.json과 lockfile 변경을 함께 제출해야 한다. |
-| 새 클론 bootstrap | 미해결 | 설치 후 바로 테스트하면 src/managed 누락. 컴파일만 추가해도 dist/managed 복사 전 adapter 타입 검사에서 실패. 컴파일 → 자산 복사 → TypeScript 빌드 순서 필요. |
-| README 프라이버시 경계 | 미해결 | server.ts에서 limitKrw를 수신해 controller.setLimit으로 전달. 로컬 ws://127.0.0.1:8787 및 역할 IPC는 한도 평문을 취급하는 데모 신뢰 경계라고 명시해야 한다. GPT·Relay·Ledger 비전달 주장과 구분해야 한다. |
-| 실제 OpenAI 모델 검증 | 재검증 필요 | 기본 gpt-5.6-sol과 실제 provider 기본 실행을 코드에서 확인. README의 과거 insufficient_quota 기록은 현재 API 성공 근거가 아니다. 이번에는 실제 API 호출을 수행하지 않았다. |
-| 실제 deploy → settle | 재검증 필요 | README에는 과거 로컬 완료 기록이 있지만 이번 Docker 상태 조회는 Docker Desktop is unable to start로 실패했다. 실제 Indexer에서 SETTLED 확인은 별도 필요. |
+| 계약 runtime 0.15.0 → 0.16.0 | 해결 | compiler 0.31.1 생성물과 runtime 0.16.0 조합으로 계약 테스트 및 로컬 정산 통과. |
+| 새 클론 bootstrap | 해결 | 컴파일 → 자산 복사 → TypeScript 빌드 순서를 고정하고 새 클론에서 검증. |
+| README 프라이버시 경계 | 해결 | 로컬 WebSocket·역할 IPC의 평문 신뢰 경계와 GPT·Relay·Ledger 비전달 범위를 구분해 명시. |
+| 실제 OpenAI 모델 검증 | 완료 | 2026-09-11 `gpt-5.6-sol` 31회 요청, 모델 선택 5회, 합의 2건 `SETTLED`; privacy audit 통과. |
+| 실제 deploy → settle | 완료 | 2026-09-11 로컬 Node·Indexer·proof server에서 `OPEN → AUTHORIZED → SETTLED` 확인. |
 
 ## 새 클론에서 확인한 실패
 
@@ -77,9 +77,9 @@ npm test
 
 ## 추가 의존성 점검
 
-검증 당시 npm audit 결과는 루트 high 1건(ws), 웹 24건(low 1, moderate 6, high 16, critical 1)이었다. 웹 critical 항목은 next였다. 이는 의존성 감사 결과이며 실제 제품에서의 악용 가능성을 검증한 것은 아니다. 자동 force 업데이트는 수행하지 않았다. 의존성 업데이트와 호환성 검증을 별도 작업으로 잡아야 한다.
+2026-09-09 npm audit 결과는 루트 high 1건(ws), 웹 24건(low 1, moderate 6, high 16, critical 1)이었다. 2026-09-11 보안 패치 적용 뒤 루트는 0건, 웹은 high 2건과 moderate 4건이다. 웹의 잔여 항목은 Vinext와 Drizzle 개발 도구 경로에 있으며, 현재 버전 범위에서 강제 업데이트 없이 제거할 수 없다.
 
-## 다음 수정 순서
+## 반영한 수정 순서
 
 1. 계약 컴파일 버전과 bootstrap 명령을 고정하고, build에서 계약 자산 복사를 tsc 이전으로 이동한다.
 2. 웹 빌드 플러그인을 Git 추적 대상으로 포함한다.
@@ -99,3 +99,13 @@ npm test
 - `/tmp/midnight-web-restored-test.log`: 플러그인 복원 후 8/8 통과
 
 임시 경로는 영구 보관을 보장하지 않는다. 이 문서의 결과 표가 검증 요약이다.
+
+## 2026-09-11 후속 검증
+
+- `npm run test:openai`: `gpt-5.6-sol` API 요청 31회, 실제 모델 선택 5회.
+- 겹치는 한도 2개 시나리오는 각각 `SETTLED`, 비중첩 시나리오는 10라운드 뒤 `CANCELLED`.
+- OpenAI 요청에 허용된 공개 입력만 포함되고 `store: false`인지 검사하는 privacy audit 통과.
+- 루트 `ws`를 `8.21.3`으로 올린 임시 클론에서 npm audit 0건, 전체 테스트 43/43 통과.
+- 웹의 Next, React, Cloudflare, Vite, Wrangler 계열을 보안 패치 버전으로 올린 임시 클론에서 critical 0건, 웹 테스트 8/8 통과. Vinext와 개발 도구 경로의 high 2건, moderate 4건은 메이저 변경 없이는 해결되지 않아 남겨 두었다.
+- Docker Desktop의 오래된 backend 프로세스를 종료하고 엔진을 다시 시작한 뒤, 기존 임시 devnet 컨테이너를 내리고 새로 생성했다.
+- mock 협상 provider와 로컬 Midnight Node·Indexer·proof server로 구매자·판매자 흐름을 실행해 Observer의 `OPEN → AUTHORIZED → SETTLED`를 확인했다.

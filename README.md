@@ -165,17 +165,17 @@ source ~/.zshrc
 npm run test:openai
 ```
 
-2026-07-26 로컬 검증에서는 요청이 OpenAI까지 도달했지만 API 프로젝트가 `429 insufficient_quota`를 반환해 실제 모델 후보의 협상 품질 평가는 완료하지 못했습니다. 같은 OpenAI 실행 모드에서 API 실패가 로컬 fallback으로 전환되고 전체 Buyer·Seller·Observer 흐름이 `SETTLED`까지 완료되는 것은 확인했습니다. 할당량 복구 후 `npm run test:openai`를 다시 실행하면 실제 모델 선택이 한 번도 없을 경우 실패하도록 구성되어 있습니다.
+2026-09-11 실제 OpenAI 평가에서 `gpt-5.6-sol`로 31개 API 요청을 수행했습니다. 모델 후보가 사용된 두 합의 시나리오는 각각 `SETTLED`에 도달했고, 한도가 겹치지 않는 시나리오는 모델을 호출하지 않고 10라운드 뒤 `CANCELLED`로 종료했습니다. 요청 본문에 허용된 공개 필드만 포함되고 `store: false`인지 검사하는 privacy audit도 통과했습니다. 이 평가는 협상 평가 스크립트 기준이며 Midnight 온체인 정산 검증과는 구분합니다.
 
-아래 표는 2026-07-26에 기록한 검증 상태입니다. 현재 코드의 실제 AI 응답과 온체인 정산을 다시 검증했다는 의미는 아닙니다. 2026-09-09 점검에서는 실제 AI 호출을 수행하지 않았고, Docker 시작 오류로 실제 체인 검증은 보류했습니다.
+아래 표는 2026-09-11까지 확인한 최신 검증 상태입니다. 실제 모델 평가는 OpenAI 전용 시나리오에서, 온체인 정산은 mock 협상 provider와 로컬 Midnight Node·Indexer·proof server에서 각각 실행했습니다.
 
 | 검증 대상 | 상태 | 확인 내용 |
 |---|---|---|
 | OpenAI 요청 배선 | 완료 | Responses API endpoint 도달, 역할별 키 전달, Observer 키 비전달 |
 | 요청 데이터 경계 | 완료 | 공개 필드만 전송, `store: false`, strict JSON schema |
 | PolicyGuard·fallback | 완료 | API 실패 후 역할 로컬 fallback으로 `SETTLED` 완료 |
-| 실제 모델 협상 품질 | 보류 | API 프로젝트 `insufficient_quota`; 할당량 복구 후 재실행 필요 |
-| Midnight 계약 | 로컬 네트워크 완료 | 로컬 Node·Indexer·proof server에서 `OPEN → AUTHORIZED → SETTLED` |
+| 실제 모델 협상 품질 | 완료 | 2026-09-11 `gpt-5.6-sol` 31회 요청, 모델 선택 5회, 합의 2건 `SETTLED` |
+| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-11 로컬 Node·Indexer·proof server에서 `OPEN → AUTHORIZED → SETTLED` 재검증 |
 | 공개 테스트넷·메인넷 | 미실행 | 현재 데모는 공개 네트워크 배포를 주장하지 않음 |
 
 ## v2 기반 검증
