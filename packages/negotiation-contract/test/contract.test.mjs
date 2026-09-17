@@ -79,6 +79,19 @@ const createSimulation = (input) => {
       context.currentPrivateState = withSellerPriceOpening(sellerState, opening);
       context = contract.impureCircuits.settle(context).context;
     },
+    settleAsThirdParty: () => {
+      context.currentPrivateState = withSellerPriceOpening(
+        {
+          ...sellerState,
+          sellerSecretKey: hexToBytes("99".repeat(32)),
+        },
+        {
+          agreedPrice: input.price,
+          priceRandomness: buyerState.priceRandomness,
+        },
+      );
+      context = contract.impureCircuits.settle(context).context;
+    },
   };
 };
 
@@ -123,6 +136,15 @@ test("rejects a Seller opening that differs from the Buyer commitment", () => {
       priceRandomness: hexToBytes("88".repeat(32)),
     }),
   );
+});
+
+test("rejects third-party settlement and leaves the authorized ledger unchanged", () => {
+  const simulation = createSimulation(scenario());
+  simulation.join();
+  simulation.authorize();
+  assert.throws(() => simulation.settleAsThirdParty(), /assert/i);
+  assert.equal(simulation.ledger().status, Negotiation.DealStatus.AUTHORIZED);
+  assert.equal(simulation.ledger().finalPrice, 0n);
 });
 
 test("enforces the Uint64 price boundary in off-chain commitments", () => {
