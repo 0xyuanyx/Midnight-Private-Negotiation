@@ -192,7 +192,7 @@ npm run test:openai
 
 2026-09-11 실제 OpenAI 평가에서 `gpt-5.6-sol`로 31개 API 요청을 수행했습니다. 모델 후보가 사용된 두 합의 시나리오는 각각 `SETTLED`에 도달했고, 한도가 겹치지 않는 시나리오는 모델을 호출하지 않고 10라운드 뒤 `CANCELLED`로 종료했습니다. 요청 본문에 허용된 공개 필드만 포함되고 `store: false`인지 검사하는 privacy audit도 통과했습니다. 이 평가는 협상 평가 스크립트 기준이며 Midnight 온체인 정산 검증과는 구분합니다.
 
-아래 표는 2026-09-11까지 확인한 최신 검증 상태입니다. 실제 모델 평가는 OpenAI 전용 시나리오에서, 온체인 정산은 mock 협상 provider와 로컬 Midnight Node·Indexer·proof server에서 각각 실행했습니다.
+아래 표는 2026-09-17까지 확인한 검증 상태입니다. 실제 모델 평가는 2026-09-11 OpenAI 전용 시나리오에서, 이번 B2B 온체인 성공·결렬 시연은 2026-09-17 mock 협상 provider와 로컬 Midnight Node·Indexer·proof server에서 각각 실행했습니다.
 
 | 검증 대상 | 상태 | 확인 내용 |
 |---|---|---|
@@ -200,8 +200,10 @@ npm run test:openai
 | 요청 데이터 경계 | 완료 | 공개 필드만 전송, `store: false`, strict JSON schema |
 | PolicyGuard·fallback | 완료 | API 실패 후 역할 로컬 fallback으로 `SETTLED` 완료 |
 | 실제 모델 협상 품질 | 완료 | 2026-09-11 `gpt-5.6-sol` 31회 요청, 모델 선택 5회, 합의 2건 `SETTLED` |
-| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-11 로컬 Node·Indexer·proof server에서 `OPEN → AUTHORIZED → SETTLED` 재검증 |
+| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-17 GPU 서버 10대 시나리오에서 `OPEN → AUTHORIZED → SETTLED`와 `OPEN → CANCELLED · 공개된 금액 없음` 확인. 제3자 정산 거절 계약 테스트 5/5 통과 |
 | 공개 테스트넷·메인넷 | 미실행 | 현재 데모는 공개 네트워크 배포를 주장하지 않음 |
+
+이번 제출 변경 후 루트 테스트는 44/44, 웹 테스트는 8/8 통과했다. 최종 원격 커밋의 **새 클론 설치·테스트는 아직 실행하지 않았다**. 호스팅된 라이브 데모 URL도 준비되지 않았다. 재개 시 [재현성 기록](docs/2026-09-09-review-reproducibility.md)의 2026-09-17 항목을 기준으로 새 클론 검증을 이어간다.
 
 ## v2 기반 검증
 

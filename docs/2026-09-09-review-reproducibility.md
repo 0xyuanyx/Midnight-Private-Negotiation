@@ -109,3 +109,13 @@ npm test
 - 웹의 Next, React, Cloudflare, Vite, Wrangler 계열을 보안 패치 버전으로 올린 임시 클론에서 critical 0건, 웹 테스트 8/8 통과. Vinext와 개발 도구 경로의 high 2건, moderate 4건은 메이저 변경 없이는 해결되지 않아 남겨 두었다.
 - Docker Desktop의 오래된 backend 프로세스를 종료하고 엔진을 다시 시작한 뒤, 기존 임시 devnet 컨테이너를 내리고 새로 생성했다.
 - mock 협상 provider와 로컬 Midnight Node·Indexer·proof server로 구매자·판매자 흐름을 실행해 Observer의 `OPEN → AUTHORIZED → SETTLED`를 확인했다.
+
+## 2026-09-17 B2B 제출 구현 및 중단 시점 기록
+
+- 협상 전략 `005e6da`, 제3자 정산 거절 테스트 `cdc418b`, B2B 화면 문구 `85cc890`, 제출 문서와 포트 설정 `fdde745`를 `main`에 커밋하고 `origin/main`에 푸시했다.
+- `npm test`: 44/44 통과. `npm --prefix apps/demo-web test`: 빌드 및 8/8 통과. 계약 집중 테스트 `node --test packages/negotiation-contract/test/contract.test.mjs`: 5/5 통과. 제3자 Seller 비밀키 정산 시도는 거절되고 계약 상태 `AUTHORIZED`, `finalPrice` `0n`을 유지한다.
+- 기존 `private-match` 컨테이너가 기본 포트 `9944`를 사용해 최초 `npm run midnight:up`은 바인딩 오류로 종료됐다. 이 컨테이너는 중단하지 않았다. 이후 `MIDNIGHT_NODE_HOST_PORT=9945 MIDNIGHT_INDEXER_HOST_PORT=8089 npm run midnight:up`으로 이 프로젝트의 Node·Indexer·proof server를 정상 기동했고, Controller의 `MIDNIGHT_NODE`, `MIDNIGHT_INDEXER`, `MIDNIGHT_INDEXER_WS`를 대응 포트로 설정했다.
+- 실제 로컬 체인과 브라우저에서 상품 코드 `4821`, 공개 기준가격 `100000000`, Buyer 한도 `110000000`, Seller 한도 `95000000`을 입력했다. Observer에 `OPEN → AUTHORIZED → SETTLED`가 순서대로 표시됐고 `SETTLED`에서 최종 가격 `100,000,000 KRW`가 처음 공개됐다.
+- 같은 브라우저에서 초기화한 뒤 Buyer `90000000`, Seller `95000000`을 입력했다. Observer에 `OPEN → CANCELLED`가 표시됐고 `CANCELLED · 공개된 금액 없음`으로 종료됐다. 이 실행의 화면에는 `AUTHORIZED`, `SETTLED`, 최종 가격이 나타나지 않았다.
+- 확인 뒤 이번 프로젝트의 웹·Controller 프로세스를 종료하고 `npm run midnight:down`으로 `negotiation-v2-*` 컨테이너와 Compose 네트워크만 내렸다.
+- **미실행:** 푸시된 최종 커밋을 공개 원격에서 새로 클론해 `bootstrap`, 루트 테스트, 웹 `npm ci`·테스트를 재실행하는 검증. 임시 디렉터리만 생성했고 클론은 시작하지 않았다. 공개 테스트넷 배포, 호스팅된 라이브 URL, 이번 변경에 대한 실제 OpenAI API 평가는 확인하지 않았다. 사용자 요청에 따라 이 지점에서 작업을 중단했다.
