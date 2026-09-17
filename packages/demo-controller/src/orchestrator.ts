@@ -47,6 +47,7 @@ const defaultFunderEntry = (): string =>
   fileURLToPath(new URL("../../midnight-adapter/dist/funder.js", import.meta.url));
 
 const chainMode = process.env.MIDNIGHT_MODE === "local";
+export const LOCAL_RUNTIME_FUNDING_AMOUNT = "5000000000000";
 
 const midnightConfig = (role: Role): Record<string, string> => {
   const common = {
@@ -999,7 +1000,7 @@ export class IsolatedRuntimeController {
         MIDNIGHT_FUNDER_INPUT: JSON.stringify({
           config: midnightConfig("buyer"),
           recipients: [buyerAddress, sellerAddress],
-          amount: "10000000000000",
+          amount: LOCAL_RUNTIME_FUNDING_AMOUNT,
         }),
       }),
       stdio: ["ignore", "ignore", "inherit", "ipc"],

@@ -27,8 +27,8 @@ test("live evaluation harness settles overlap and cancels non-overlap from publi
   assert.deepEqual(happy, {
     name: "happy-100k",
     result: "SETTLED",
-    agreedAmount: "100000",
-    rounds: 1,
+    agreedAmount: "100750",
+    rounds: 3,
     modelSelections: 2,
   });
 
@@ -44,7 +44,7 @@ test("live evaluation harness settles overlap and cancels non-overlap from publi
   assert.deepEqual(cancelled, {
     name: "cancelled-gap",
     result: "CANCELLED",
-    rounds: 1,
+    rounds: 10,
     modelSelections: 0,
   });
 
@@ -69,4 +69,24 @@ test("live evaluation harness settles overlap and cancels non-overlap from publi
       /maximumPrice|minimumPrice|commitment|randomness|secret|wallet|PolicyGuard|retry/i,
     );
   }
+});
+
+test("balanced fallback keeps the 1,030,000 and 780,550 KRW settlement away from the Seller floor", async () => {
+  const contexts = [];
+  const result = await runNegotiationScenario({
+    name: "balanced-1030k-780550",
+    buyerLimit: 1030000n,
+    sellerLimit: 780550n,
+    publicReferencePrice: "100000",
+    buyerProvider: publicProvider(contexts),
+    sellerProvider: publicProvider(contexts),
+  });
+
+  assert.deepEqual(result, {
+    name: "balanced-1030k-780550",
+    result: "SETTLED",
+    agreedAmount: "897750",
+    rounds: 1,
+    modelSelections: 2,
+  });
 });

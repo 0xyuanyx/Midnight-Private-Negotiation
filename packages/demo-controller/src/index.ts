@@ -1,5 +1,6 @@
 export {
   IsolatedRuntimeController,
+  LOCAL_RUNTIME_FUNDING_AMOUNT,
   runtimeProcessEnvironment,
 } from "./orchestrator.js";
 export { isBrowserDisplayEvent } from "./display-policy.js";

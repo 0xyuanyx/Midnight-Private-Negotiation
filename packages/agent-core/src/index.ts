@@ -43,7 +43,8 @@ export type LocalPolicy =
 
 const MAX_KRW = 18_446_744_073_709_551_615n;
 const MAX_CANDIDATES = 5;
-export const NEGOTIATION_PROMPT_VERSION = "2026-07-26.v2";
+export const PRICE_INCREMENT_KRW = 250n;
+export const NEGOTIATION_PROMPT_VERSION = "2026-07-28.v3";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -66,6 +67,11 @@ const parsePrice = (value: unknown): bigint | undefined => {
   }
   const price = BigInt(value);
   return price <= MAX_KRW ? price : undefined;
+};
+
+export const isOfferPriceIncrementValid = (rawPrice: string): boolean => {
+  const price = parsePrice(rawPrice);
+  return price !== undefined && price % PRICE_INCREMENT_KRW === 0n;
 };
 
 const validatePublicContext = (
@@ -126,6 +132,8 @@ const COMMON_NEGOTIATION_INSTRUCTIONS = `
 - currentOffer가 있으면 첫 후보는 그 가격을 그대로 수락하는 accept 후보로 둔다. 뒤에는 역할에 맞는 신중한 counter offer 후보를 가까운 가격부터 단계적으로 배치한다.
 - 양보 폭은 갑작스럽게 크게 바꾸지 말고, 공개된 현재 제안을 기준으로 점진적으로 조정한다.
 - exact price를 포함한 모든 후보는 양의 정수 KRW 문자열이어야 한다. 쉼표, 소수점, 통화기호, 단위는 넣지 않는다.
+- 모든 offer 가격은 반드시 250 KRW 단위여야 한다. 즉 250으로 나누어떨어져야 한다.
+- 가능한 경우 90,750, 93,250, 96,500처럼 자연스러운 값을 사용하고 1,000원 단위에만 반복적으로 맞추지 않는다.
 - accept는 currentOffer가 있을 때에만 가능하며 price는 currentOffer.price와 정확히 같아야 한다.
 - 최대 협상 라운드는 10이다. 현재 round 안에서 가능한 후보만 만들고 종료 여부를 스스로 선언하지 않는다.
 - 후보는 제안일 뿐이다. 어떤 후보가 허용될 것인지, 합의가 가능한지, 상대 한도와 겹치는지는 단정하지 않는다.
@@ -138,12 +146,13 @@ const COMMON_NEGOTIATION_INSTRUCTIONS = `
 [출력 계약]
 - 설명, 인사말, 협상 대사, 추론, Markdown, 코드 블록을 출력하지 않는다.
 - 오직 {"candidates":[...]} 형태의 JSON 객체 하나만 출력한다.
-- 각 원소는 {"action":"offer","price":"100000"} 또는 {"action":"accept","price":"100000"} 형식이며 다른 필드는 넣지 않는다.
+- 각 원소는 {"action":"offer","price":"90750"} 또는 {"action":"accept","price":"90750"} 형식이며 다른 필드는 넣지 않는다.
 `.trim();
 
 const BUYER_NEGOTIATION_INSTRUCTIONS = `
 [BUYER 역할]
 - 구매자의 목표는 성급하게 높은 가격을 확정하지 않으면서도, 합의 가능성이 있는 거래를 놓치지 않는 것이다.
+- 첫 공개 제안은 보통 publicReferencePrice의 약 90.75%에서 시작하고 250 KRW 단위로 맞춘다. 이후 후보는 공개 기준가 방향으로 점진적으로 배치한다.
 - 판매자의 공개 제안이 있으면 수락 후보를 먼저 만들고, 그보다 낮은 counter offer 후보들을 현재 제안에 가까운 값부터 점진적으로 만든다.
 - 공개 제안과 라운드 흐름을 존중하며 가격을 올릴 때는 작은 단계로 신중하게 조정한다.
 - 구매자의 실제 최대 한도를 알고 있는 것처럼 말하거나, 후보 가격을 최대 한도 또는 최종 가격이라고 설명하지 않는다.
@@ -212,7 +221,10 @@ const validateCandidates = (
       !isRecord(candidate) ||
       !hasExactKeys(candidate, ["action", "price"]) ||
       (candidate.action !== "offer" && candidate.action !== "accept") ||
-      parsePrice(candidate.price) === undefined
+      typeof candidate.price !== "string" ||
+      parsePrice(candidate.price) === undefined ||
+      (candidate.action === "offer" &&
+        !isOfferPriceIncrementValid(candidate.price))
     ) {
       throw new Error("candidate provider returned an invalid candidate");
     }
@@ -336,10 +348,44 @@ export const createOpenAIResponsesProvider = (
   };
 };
 
+const roundDownToPriceIncrement = (price: bigint): bigint | undefined => {
+  const rounded = (price / PRICE_INCREMENT_KRW) * PRICE_INCREMENT_KRW;
+  return rounded >= PRICE_INCREMENT_KRW && rounded <= MAX_KRW
+    ? rounded
+    : undefined;
+};
+
+const roundUpToPriceIncrement = (price: bigint): bigint | undefined => {
+  const remainder = price % PRICE_INCREMENT_KRW;
+  const rounded =
+    remainder === 0n ? price : price + PRICE_INCREMENT_KRW - remainder;
+  return rounded >= PRICE_INCREMENT_KRW && rounded <= MAX_KRW
+    ? rounded
+    : undefined;
+};
+
+export const localTargetPrice = (
+  policy: LocalPolicy,
+  round: number,
+): bigint | undefined => {
+  if (!Number.isInteger(round) || round < 1 || round > 10) return undefined;
+  const progress = BigInt(round - 1);
+  if (policy.role === "buyer") {
+    const basisPoints = 9_000n + (progress * 1_000n) / 9n;
+    return roundDownToPriceIncrement(
+      (policy.maximumPrice * basisPoints) / 10_000n,
+    );
+  }
+  const basisPoints = 11_500n - (progress * 1_500n) / 9n;
+  return roundUpToPriceIncrement(
+    (policy.minimumPrice * basisPoints) / 10_000n,
+  );
+};
+
 const scalePrice = (price: bigint, basisPoints: bigint): string => {
   const scaled = (price * basisPoints) / 10_000n;
   const safe = scaled < 1n ? 1n : scaled > MAX_KRW ? MAX_KRW : scaled;
-  return safe.toString();
+  return (roundDownToPriceIncrement(safe) ?? PRICE_INCREMENT_KRW).toString();
 };
 
 const uniqueCandidates = (
@@ -381,7 +427,7 @@ export const createDeterministicMockProvider = (
           throw new Error("only Buyer can create the opening mock offer");
         }
         return uniqueCandidates(
-          [10_000n, 9_500n, 9_000n, 8_500n, 8_000n].map(
+          [9_075n, 9_325n, 9_575n, 9_825n, 10_000n].map(
             (basisPoints): NegotiationCandidate => ({
               action: "offer",
               price: scalePrice(referencePrice, basisPoints),
@@ -396,8 +442,8 @@ export const createDeterministicMockProvider = (
       };
       const counterBasisPoints =
         context.role === "buyer"
-          ? ([10_000n, 9_500n, 9_000n, 8_000n] as const)
-          : ([10_000n, 10_500n, 11_000n, 11_500n] as const);
+          ? ([10_000n, 9_725n, 9_475n, 9_075n] as const)
+          : ([10_000n, 10_525n, 11_075n, 11_525n] as const);
       return uniqueCandidates([
         accept,
         ...counterBasisPoints.map(
@@ -458,13 +504,29 @@ export const policyAllows = (
     ) {
       return false;
     }
-  } else if (candidate.action !== "offer") {
+  } else if (
+    candidate.action !== "offer" ||
+    !isOfferPriceIncrementValid(candidate.price)
+  ) {
     return false;
   }
 
   return policy.role === "buyer"
     ? price <= policy.maximumPrice
     : price >= policy.minimumPrice;
+};
+
+export const strategyAllows = (
+  policy: LocalPolicy,
+  rawContext: PublicNegotiationContext,
+  candidate: NegotiationCandidate,
+): boolean => {
+  const context = validatePublicContext(rawContext);
+  if (!policyAllows(policy, context, candidate)) return false;
+  const price = parsePrice(candidate.price);
+  const target = localTargetPrice(policy, context.round);
+  if (price === undefined || target === undefined) return false;
+  return policy.role === "buyer" ? price <= target : price >= target;
 };
 
 export const generateAllowedCandidate = async (input: {
@@ -505,7 +567,7 @@ export const generateAllowedCandidate = async (input: {
         await input.provider.generateCandidates(providerContext),
       );
       const allowed = candidates.find((candidate) =>
-        policyAllows(input.policy, context, candidate),
+        strategyAllows(input.policy, context, candidate),
       );
       if (allowed !== undefined) return allowed;
     } catch {
@@ -522,31 +584,21 @@ export const generateLocalFallbackCandidate = (input: {
   const context = validatePublicContext(input.context);
   if (context.role !== input.policy.role) return undefined;
 
-  if (input.policy.role === "buyer") {
-    if (context.currentOffer !== undefined) {
-      const acceptance: NegotiationCandidate = {
-        action: "accept",
-        price: context.currentOffer.price,
-      };
-      return policyAllows(input.policy, context, acceptance)
-        ? acceptance
-        : undefined;
-    }
-
-    const discounted = (input.policy.maximumPrice * 9n) / 10n;
-    const price = discounted < 1n ? 1n : discounted;
-    return { action: "offer", price: price.toString() };
+  if (context.currentOffer !== undefined) {
+    const acceptance: NegotiationCandidate = {
+      action: "accept",
+      price: context.currentOffer.price,
+    };
+    if (strategyAllows(input.policy, context, acceptance)) return acceptance;
+  } else if (input.policy.role === "seller") {
+    return undefined;
   }
 
-  if (context.currentOffer === undefined) return undefined;
-  const acceptance: NegotiationCandidate = {
-    action: "accept",
-    price: context.currentOffer.price,
-  };
-  if (policyAllows(input.policy, context, acceptance)) return acceptance;
-
-  return {
+  const price = localTargetPrice(input.policy, context.round);
+  if (price === undefined) return undefined;
+  const offer: NegotiationCandidate = {
     action: "offer",
-    price: input.policy.minimumPrice.toString(),
+    price: price.toString(),
   };
+  return strategyAllows(input.policy, context, offer) ? offer : undefined;
 };

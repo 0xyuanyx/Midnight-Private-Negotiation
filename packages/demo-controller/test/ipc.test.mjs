@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   createRoomSessionId,
   IsolatedRuntimeController,
+  LOCAL_RUNTIME_FUNDING_AMOUNT,
   runtimeProcessEnvironment,
 } from "../dist/index.js";
 
@@ -33,6 +34,10 @@ test("scopes identical product codes to one browser demo instance", () => {
 
   assert.equal(first, "room-1111-12345678-1234-1234-1234-123456789abc");
   assert.notEqual(first, second);
+});
+
+test("keeps a generous local runtime balance without exhausting the genesis funder", () => {
+  assert.equal(LOCAL_RUNTIME_FUNDING_AMOUNT, "5000000000000");
 });
 
 test("scopes the OpenAI credential to Buyer and Seller runtime environments", () => {
@@ -403,7 +408,7 @@ test("syncs an existing Buyer commitment before a late Seller enters a limit", a
       limitKrw: "300000",
     });
     const result = await settled;
-    assert.equal(result.publicAmount, "300000");
+    assert.equal(result.publicAmount, "345000");
     assert.equal(
       events.some(
         (event) =>
@@ -458,7 +463,7 @@ test("settles overlapping 1,000,000 and 700,000 KRW limits without an external A
     });
 
     const event = await settled;
-    assert.equal(event.publicAmount, "700000");
+    assert.equal(event.publicAmount, "805000");
   } finally {
     await controller.shutdown();
   }
