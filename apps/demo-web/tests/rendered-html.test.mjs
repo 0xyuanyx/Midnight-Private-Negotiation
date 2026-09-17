@@ -31,9 +31,9 @@ test("server-renders the private negotiation console", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Midnight 비공개 협상 데모<\/title>/i);
+  assert.match(html, /<title>Midnight B2B 비공개 견적 협상<\/title>/i);
   assert.match(html, /MIDNIGHT/);
-  assert.match(html, /비공개 협상 데모/);
+  assert.match(html, /GPU 서버 10대 · 비공개 B2B 견적 협상/);
   assert.match(html, /BUYER/);
   assert.match(html, /SELLER/);
   assert.match(html, /OBSERVER/);

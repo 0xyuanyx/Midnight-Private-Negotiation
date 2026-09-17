@@ -82,7 +82,8 @@ Midnight 공식 사이트의 어두운 바탕과 선명한 블루를 가져오�
 **Page Header**
 
 - Default: 높이 56px, `#101010`, 하단 1px `#343434`
-- 내용: 왼쪽에 공식 `Midnight-RGB_Logo-Horizontal-White.svg`, 구분선, `비공개 협상 데모`
+- 내용: 왼쪽에 공식 `Midnight-RGB_Logo-Horizontal-White.svg`, 구분선, `GPU 서버 10대 · 비공개 B2B 견적 협상`
+- 이 제목은 공개된 발표 시나리오만 식별하며 Buyer 한도, Seller 한도, 중간 제안, 라운드는 드러내지 않는다.
 - 공식 로고는 가로세로 비율을 유지하고 높이 약 24px로 표시하며 CSS로 재조립하거나 텍스트로 대체하지 않는다.
 - Hover/Focus/Active/Disabled/Loading: 인터랙션이 없는 정적 헤더이므로 적용하지 않는다.
 

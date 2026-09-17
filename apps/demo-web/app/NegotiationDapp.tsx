@@ -599,7 +599,7 @@ export function NegotiationDapp({ initialNow }: { initialNow: string }) {
             priority
           />
           <span className="brand-divider" aria-hidden="true" />
-          <h1>비공개 협상 데모</h1>
+          <h1>GPU 서버 10대 · 비공개 B2B 견적 협상</h1>
         </div>
         {hasStarted ? (
           <button className="reset-button" type="button" onClick={reset}>
