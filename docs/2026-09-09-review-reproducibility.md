@@ -118,4 +118,26 @@ npm test
 - 실제 로컬 체인과 브라우저에서 상품 코드 `4821`, 공개 기준가격 `100000000`, Buyer 한도 `110000000`, Seller 한도 `95000000`을 입력했다. Observer에 `OPEN → AUTHORIZED → SETTLED`가 순서대로 표시됐고 `SETTLED`에서 최종 가격 `100,000,000 KRW`가 처음 공개됐다.
 - 같은 브라우저에서 초기화한 뒤 Buyer `90000000`, Seller `95000000`을 입력했다. Observer에 `OPEN → CANCELLED`가 표시됐고 `CANCELLED · 공개된 금액 없음`으로 종료됐다. 이 실행의 화면에는 `AUTHORIZED`, `SETTLED`, 최종 가격이 나타나지 않았다.
 - 확인 뒤 이번 프로젝트의 웹·Controller 프로세스를 종료하고 `npm run midnight:down`으로 `negotiation-v2-*` 컨테이너와 Compose 네트워크만 내렸다.
-- **미실행:** 푸시된 최종 커밋을 공개 원격에서 새로 클론해 `bootstrap`, 루트 테스트, 웹 `npm ci`·테스트를 재실행하는 검증. 임시 디렉터리만 생성했고 클론은 시작하지 않았다. 공개 테스트넷 배포, 호스팅된 라이브 URL, 이번 변경에 대한 실제 OpenAI API 평가는 확인하지 않았다. 사용자 요청에 따라 이 지점에서 작업을 중단했다.
+- 당시 미실행이었던 항목: 푸시된 최종 커밋을 공개 원격에서 새로 클론해 `bootstrap`, 루트 테스트, 웹 `npm ci`·테스트를 재실행하는 검증. 임시 디렉터리만 생성했고 클론은 시작하지 않았다. 공개 테스트넷 배포, 호스팅된 라이브 URL, 이번 변경에 대한 실제 OpenAI API 평가도 확인하지 않았다. 사용자 요청에 따라 이 지점에서 작업을 중단했다. 이 중 새 클론 검증은 아래 2026-09-17 항목에서 완료했다.
+
+## 2026-09-17 공개 원격 새 클론 검증
+
+위에서 미실행으로 남았던 새 클론 검증을 실행했다. 공개 원격 `https://github.com/0xyuanyx/Midnight-Private-Negotiation.git`을 임시 디렉터리에 `--depth 1`로 새로 클론했고, 클론된 `HEAD`는 `4d95515ddab6b4b43e614bead084a7fc2e23a525`(`docs: record submission rehearsal and remaining verification`)이다.
+
+환경은 macOS arm64, Node `v24.14.1`, npm `11.11.0`, Compact CLI `0.5.1`, compiler `0.31.1`이다. 기존 작업 폴더의 `node_modules`, `dist`, `managed`, Docker 데이터, 미커밋 파일을 복사하지 않았고, `OPENAI_API_KEY`·`MEMO_OPENAI_API_KEY`·`NEGOTIATION_*` 환경 변수를 검증 셸에서 명시적으로 해제한 뒤 실행했다.
+
+| 명령 | 결과 |
+|---|---|
+| `git clone --depth 1` | 통과 (2초) |
+| `compact compile +0.31.1 --version` | 통과 |
+| `npm run bootstrap` | 통과 (37초) |
+| `npm run typecheck` | 통과 |
+| `npm test` | 44/44 통과 (15.6초) |
+| `npm --prefix apps/demo-web ci` | 통과 (21초) |
+| `npm --prefix apps/demo-web test` | 8/8 통과 |
+
+루트 44개에는 `rejects third-party settlement and leaves the authorized ledger unchanged`와 `skips proof and settlement states when private limits do not overlap`이 포함된다.
+
+**이 검증에 포함되지 않은 것:** 새 클론에서 Docker 로컬 체인을 다시 기동한 실행, 공개 테스트넷·메인넷 배포, 호스팅된 라이브 URL, 이번 변경에 대한 실제 OpenAI API 협상 평가. 로컬 체인 성공·결렬 시연은 같은 날 원본 작업 폴더에서 확인한 위 항목이 근거이며 새 클론에서 재현하지 않았다.
+
+별도로 OpenAI provider 배선을 실제 API 1회 호출로 확인했다. `gpt-5.6-sol`이 strict Structured Outputs로 후보 5개를 반환했고 모두 250 KRW 단위와 Buyer StrategyGuard를 통과했다. 요청 본문에는 `role`, `productCode`, `round`, `publicReferencePrice`만 포함됐고 `store`는 `false`였다. 이는 배선 확인이며 2026-09-11의 31회 협상 평가를 대체하지 않는다.
