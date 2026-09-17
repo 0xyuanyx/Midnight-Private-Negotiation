@@ -21,7 +21,7 @@ services:
     image: midnightntwrk/midnight-node:0.22.3
     container_name: negotiation-v2-node
     ports:
-      - "9944:9944"
+      - "${MIDNIGHT_NODE_HOST_PORT:-9944}:9944"
     environment:
       CFG_PRESET: dev
       SIDECHAIN_BLOCK_BENEFICIARY: 04bcf7ad3be7a5c790460be82a713af570f22e0f801f6659ab8e84a52be6969e
@@ -37,7 +37,7 @@ services:
     container_name: negotiation-v2-indexer
     env_file: midnight-local.env
     ports:
-      - "8088:8088"
+      - "${MIDNIGHT_INDEXER_HOST_PORT:-8088}:8088"
     environment:
       RUST_LOG: indexer=info,chain_indexer=info,indexer_api=info,wallet_indexer=info,indexer_common=info,fastrace_opentelemetry=off,info
       APP__APPLICATION__NETWORK_ID: undeployed

@@ -1,6 +1,10 @@
 # Midnight Private Negotiation DApp
 
-구매자와 판매자의 가격 한도를 공개하지 않고 AI 에이전트가 협상한 뒤, 합의가 성립하면 최종 금액만 Midnight에 기록하는 데모 DApp입니다.
+구매자와 판매자의 예약 가격을 상대방·AI·Relay·공개 원장에 전달하지 않고 협상한 뒤, 합의가 성립하면 최종 가격을 Midnight에 공개하는 데모 DApp입니다.
+
+제출 시나리오는 가상의 기업 구매 담당자와 공급업체가 **동일 규격 GPU 서버 10대**의 견적을 협상하는 경우입니다. 시연용 공개 기준가격은 **100,000,000 KRW**, 설명용 납기는 **30일**입니다. 품목·수량·납기는 발표 맥락에만 쓰는 정적 예시이며 현재 AI 요청이나 계약 데이터에는 포함되지 않습니다. 실제 AI 입력은 상품 코드, 공개 기준가격, 현재 제안, 라운드와 역할 정보로 제한됩니다. 아래 금액은 모두 시연 값이며 실제 거래 가격이나 고객 검증 결과가 아닙니다.
+
+구매자 최대 승인 한도와 판매자 최저 수용가는 상대방·AI·Relay·공개 원장에 전달하지 않습니다. 현재 단일 브라우저와 로컬 Demo Controller는 데모 신뢰 경계 안에 있으며, Controller는 입력 한도를 대상 역할 런타임에 평문으로 전달합니다. 계약이 `SETTLED`가 되면 최종 합의 가격이 공개됩니다. 이 데모는 분리된 구매자·판매자 클라이언트나 최종 계약가 비공개를 구현하지 않습니다.
 
 현재 루트는 새 DApp(v2)의 설계와 구현을 위한 작업 공간입니다. Counter 예제를 기반으로 만든 이전 데모는 `v1/`에 로컬 아카이브로 보존하지만, Git 추적과 원격 저장소에서는 제외합니다.
 
@@ -10,7 +14,7 @@
 - Buyer와 Seller가 동일한 4자리 상품 코드로 협상방에 참여
 - 각 역할의 한도와 commitment randomness는 역할별 로컬 private state에서 관리하며, 한도 입력은 아래 로컬 Controller 신뢰 경계를 거쳐 전달
 - GPT에는 정확한 한도를 전달하지 않고 공개 기준가·현재 제안·협상 맥락만 전달
-- 로컬 `PolicyGuard`가 후보 제안이 역할별 한도 안에 있는지 검사
+- 로컬 `PolicyGuard`와 `StrategyGuard`가 후보 제안의 역할별 한도와 단계적 가격 전략을 검사
 - 역할 간 협상 메시지는 Room Relay를 통해 암호문으로 전달
 - Observer는 Midnight Indexer의 공개 상태와 최종 합의 금액만 표시
 - 최대 10라운드는 내부 종료 조건으로만 사용하고 화면에는 라운드 수·중간 제안·재시도 횟수를 표시하지 않음
@@ -38,7 +42,7 @@
 └── docs/               # 새 DApp 설계 문서
 ```
 
-공용 프로토콜, 별도 역할 프로세스, WebSocket Controller와 3패널 웹 DApp이 구현되어 있습니다. 브라우저는 로그를 자체 생성하지 않고 검증된 런타임 이벤트만 표시합니다. mock과 실제 OpenAI provider는 공개 기준가·현재 제안·라운드만으로 최대 다섯 후보를 생성하고, 각 역할의 로컬 `PolicyGuard`가 자기 한도로 전송·수락 가능 여부를 검사합니다. 외부 AI가 없거나 모든 후보가 정책을 통과하지 못하면 역할 런타임 내부의 결정론적 fallback이 제안·수락을 이어받습니다. fallback이 사용하는 한도는 GPT 입력, Controller, 로그로 전달되지 않습니다. 실패 후보와 stateless 재요청도 화면·IPC·Relay에 노출되지 않습니다. Room Relay는 Controller와 분리된 네 번째 프로세스로 실행되며 Buyer·Seller가 로컬 TCP로 직접 연결합니다. 역할 간 협상 패킷은 임시 X25519 공유 비밀에서 HKDF-SHA-256 세션 키를 만들고, 방·역할·순번을 AAD로 묶은 AES-256-GCM 암호문만 Relay에 전달합니다.
+공용 프로토콜, 별도 역할 프로세스, WebSocket Controller와 3패널 웹 DApp이 구현되어 있습니다. 브라우저는 로그를 자체 생성하지 않고 검증된 런타임 이벤트만 표시합니다. mock과 실제 OpenAI provider는 공개 기준가·현재 제안·라운드만으로 최대 다섯 후보를 생성하고, 각 역할의 로컬 `PolicyGuard`와 `StrategyGuard`가 자기 한도와 가격 전략에 맞는지 검사합니다. 외부 AI가 없거나 모든 후보가 정책을 통과하지 못하면 역할 런타임 내부의 결정론적 fallback이 제안·수락을 이어받습니다. 한도는 Controller를 거쳐 대상 역할 런타임에 전달되지만 GPT 입력이나 로그에는 포함되지 않습니다. 실패 후보와 stateless 재요청도 화면·IPC·Relay에 노출되지 않습니다. Room Relay는 Controller와 분리된 네 번째 프로세스로 실행되며 Buyer·Seller가 로컬 TCP로 직접 연결합니다. 역할 간 협상 패킷은 임시 X25519 공유 비밀에서 HKDF-SHA-256 세션 키를 만들고, 방·역할·순번을 AAD로 묶은 AES-256-GCM 암호문만 Relay에 전달합니다.
 
 Midnight 로컬 체인 모드에서는 Buyer가 계약을 배포하고, Seller가 `joinDeal`, Buyer가 `authorizeHiddenPrice`, Seller가 `settle`을 각각 자기 프로세스와 전용 proof server에서 실행합니다. Controller의 타이머가 공개 상태를 만들지 않으며, 지갑이 보고한 트랜잭션 완료 뒤에도 Observer가 Indexer에서 `OPEN → AUTHORIZED → SETTLED`를 확인해야 웹에 표시됩니다. Buyer·Seller 한도는 계약의 witness로만 사용되고 공개 ledger에는 commitment만 남으며, `finalPrice`는 `SETTLED`에서만 공개됩니다. 새 코드에서는 `counter` 레거시 명칭을 사용하지 않습니다.
 
@@ -120,6 +124,27 @@ npm run demo:midnight
 ```
 
 API 호출 없이 Midnight 연결만 확인할 때는 `npm run demo:midnight:mock`을 사용합니다.
+
+해커톤 B2B 시나리오는 다음처럼 공개 기준가격을 명시해 실행합니다. `mock` 모드는 실제 AI API를 호출하지 않고 결정론적 후보 생성기를 사용합니다.
+
+```bash
+npm run midnight:up
+NEGOTIATION_REFERENCE_PRICE_KRW=100000000 npm run demo:midnight:mock
+npm --prefix apps/demo-web run dev -- --port 3001
+```
+
+각 명령은 별도 터미널에서 실행합니다. `http://localhost:3001/`에서 Buyer와 Seller가 각각 상품 코드 `4821`을 입력합니다. 성공 시연은 Buyer 최대 한도 `110000000`, Seller 최소 금액 `95000000`을 입력해 Observer의 `OPEN → AUTHORIZED → SETTLED`와 최종 공개 가격을 확인합니다. 화면을 초기화한 뒤 결렬 시연에는 Buyer `90000000`, Seller `95000000`을 입력합니다. 한도가 겹치지 않으면 `CANCELLED`로 종료되고 결렬 가격은 표시하지 않습니다. 제3자 정산 거절은 아래 계약 테스트로 재현합니다.
+
+다른 로컬 Midnight 프로젝트가 기본 포트 `9944` 또는 `8088`을 사용 중이면 해당 컨테이너를 중단할 필요가 없습니다. 이 프로젝트의 Node와 Indexer 호스트 포트만 바꿔 실행할 수 있습니다. 다른 두 터미널의 웹 명령은 그대로 사용합니다.
+
+```bash
+MIDNIGHT_NODE_HOST_PORT=9945 MIDNIGHT_INDEXER_HOST_PORT=8089 npm run midnight:up
+MIDNIGHT_NODE=http://127.0.0.1:9945 MIDNIGHT_INDEXER=http://127.0.0.1:8089/api/v3/graphql MIDNIGHT_INDEXER_WS=ws://127.0.0.1:8089/api/v3/graphql/ws NEGOTIATION_REFERENCE_PRICE_KRW=100000000 npm run demo:midnight:mock
+```
+
+```bash
+node --test packages/negotiation-contract/test/contract.test.mjs
+```
 
 터미널 3에서는 위와 동일하게 웹을 실행합니다. 웹의 WebSocket 주소는 바뀌지 않으므로 기존 3패널 화면이 실제 체인 이벤트를 그대로 받습니다.
 

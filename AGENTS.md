@@ -5,3 +5,7 @@
 
 If present, read `./.omd/preferences.md` — pending corrections not yet folded into DESIGN.md. Apply them; flag conflicts.
 <!-- omd:end -->
+
+## Project direction
+
+Before project work, read `PROJECT_DIRECTION.md` and `README.md`. When a conversation establishes or changes project direction, update `PROJECT_DIRECTION.md` in the same task. Distinguish confirmed decisions, proposals, open questions, and verified implementation. Keep README aligned when actual behavior or run instructions change. Do not treat Drivacy's Claude Code scaffold plan as a decision for this repository.
