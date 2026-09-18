@@ -86,6 +86,27 @@ const createSimulation = (input) => {
       context.currentPrivateState = sellerState;
       context = contract.impureCircuits.cancelAsSeller(context).context;
     },
+    authorizeAsThirdParty: () => {
+      context.currentPrivateState = {
+        ...buyerState,
+        buyerSecretKey: hexToBytes("99".repeat(32)),
+      };
+      context = contract.impureCircuits.authorizeHiddenPrice(context).context;
+    },
+    cancelAsThirdPartyBuyer: () => {
+      context.currentPrivateState = {
+        ...buyerState,
+        buyerSecretKey: hexToBytes("99".repeat(32)),
+      };
+      context = contract.impureCircuits.cancelAsBuyer(context).context;
+    },
+    cancelAsThirdPartySeller: () => {
+      context.currentPrivateState = {
+        ...sellerState,
+        sellerSecretKey: hexToBytes("99".repeat(32)),
+      };
+      context = contract.impureCircuits.cancelAsSeller(context).context;
+    },
     authorize: () => {
       context.currentPrivateState = buyerState;
       context = contract.impureCircuits.authorizeHiddenPrice(context).context;
@@ -171,6 +192,16 @@ test("pins the Seller at deployment and rejects a third-party joinDeal", () => {
   simulation.join();
   assert.equal(simulation.ledger().status, Negotiation.DealStatus.OPEN);
   assert.deepEqual(simulation.ledger().sellerKey, simulation.sellerKey);
+});
+
+test("rejects third-party authorization and cancellation without changing the ledger", () => {
+  const simulation = createSimulation(scenario());
+  simulation.join();
+  assert.throws(() => simulation.authorizeAsThirdParty(), /caller is not buyer/);
+  assert.throws(() => simulation.cancelAsThirdPartyBuyer(), /caller is not buyer/);
+  assert.throws(() => simulation.cancelAsThirdPartySeller(), /caller is not seller/);
+  assert.equal(simulation.ledger().status, Negotiation.DealStatus.OPEN);
+  assert.equal(simulation.ledger().finalPrice, 0n);
 });
 
 test("lets the pinned Seller cancel before joining, which closes the deal", () => {

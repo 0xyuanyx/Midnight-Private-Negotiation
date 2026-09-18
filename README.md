@@ -78,7 +78,13 @@ npm --prefix apps/demo-web ci
 npm --prefix apps/demo-web test
 ```
 
-`bootstrap`은 lockfile 기반 설치 → 계약 컴파일 → 생성물 복사 → TypeScript 빌드를 수행합니다. 계약 스크립트는 전역 기본 버전과 관계없이 compiler `0.31.1`을 사용하며 계약 runtime은 `0.16.0`입니다. `managed/`, `dist/`, `node_modules/`는 Git에 포함하지 않습니다. 새 클론에서는 `bootstrap`을 먼저 실행해야 합니다. 웹은 루트 workspace에 포함되지 않아 별도 설치가 필요합니다. 최초 설치와 위 테스트에는 OpenAI 키나 Docker가 필요하지 않습니다.
+Compact CLI가 없다면 먼저 설치하고 새 터미널을 엽니다.
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
+```
+
+`bootstrap`과 `contract:compile`은 시작 전에 Node 버전, Compact CLI, compiler `0.31.1` 설치 여부를 점검하고, 빠진 것이 있으면 실행할 명령을 안내한 뒤 멈춥니다. `bootstrap`은 이어서 lockfile 기반 설치 → 계약 컴파일 → 생성물 복사 → TypeScript 빌드를 수행합니다. 계약 스크립트는 전역 기본 버전과 관계없이 compiler `0.31.1`을 사용하며 계약 runtime은 `0.16.0`입니다. `managed/`, `dist/`, `node_modules/`는 Git에 포함하지 않습니다. 새 클론에서는 `bootstrap`을 먼저 실행해야 합니다. 웹은 루트 workspace에 포함되지 않아 별도 설치가 필요합니다. 최초 설치와 위 테스트에는 OpenAI 키나 Docker가 필요하지 않습니다.
 
 ## 로컬 DApp 실행
 
@@ -202,10 +208,10 @@ npm run test:openai
 | 요청 데이터 경계 | 완료 | 공개 필드만 전송, `store: false`, strict JSON schema |
 | PolicyGuard·fallback | 완료 | API 실패 후 역할 로컬 fallback으로 `SETTLED` 완료 |
 | 실제 모델 협상 품질 | 완료 | 2026-09-11 `gpt-5.6-sol` 31회 요청, 모델 선택 5회, 합의 2건 `SETTLED` |
-| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-18 Seller 고정 계약으로 성공 `OPEN → AUTHORIZED → SETTLED · 100,000,000 KRW`(입력 순서 두 가지 각 1회)와 결렬 `OPEN → CANCELLED · 공개된 금액 없음` 확인. 제3자 정산·제3자 참여 거절을 포함한 계약 테스트 7/7 통과 |
+| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-18 Seller 고정 계약으로 성공 `OPEN → AUTHORIZED → SETTLED · 100,000,000 KRW`(입력 순서 두 가지 각 1회)와 결렬 `OPEN → CANCELLED · 공개된 금액 없음` 확인. 제3자의 참여·승인·정산·취소 거절을 포함한 계약 테스트 8/8 통과 |
 | 공개 테스트넷·메인넷 | 미실행 | 현재 데모는 공개 네트워크 배포를 주장하지 않음 |
 
-2026-09-18 보안 수정 후 루트 테스트는 46/46, 웹 테스트는 8/8 통과했습니다. 아래 새 클론 검증은 보안 수정 이전 커밋 기준입니다. 2026-09-17에 공개 원격의 최종 커밋 `4d95515`를 새로 클론해 `compact compile +0.31.1`, `npm run bootstrap`, `npm run typecheck`, 루트 테스트 44/44, 웹 `npm ci`와 웹 테스트 8/8이 모두 통과하는 것을 확인했습니다. 이 새 클론 검증에는 Docker 로컬 체인 재기동이 포함되지 않았고, 공개 테스트넷 배포와 호스팅된 라이브 데모 URL도 준비되지 않았습니다. 자세한 명령과 범위는 [재현성 기록](docs/2026-09-09-review-reproducibility.md)에 있습니다.
+현재 루트 테스트는 47/47, 웹 테스트는 8/8 통과합니다. 2026-09-18에 보안 수정 커밋 `999c1af`를 공개 원격에서 새로 클론해 `compact compile +0.31.1`, `npm run bootstrap`, `npm run typecheck`, 루트 테스트 46/46, 웹 `npm ci`와 웹 테스트 8/8이 모두 통과하는 것을 확인했습니다. 이 새 클론 검증에는 Docker 로컬 체인 재기동이 포함되지 않았고, 공개 테스트넷 배포와 호스팅된 라이브 데모 URL도 준비되지 않았습니다. 자세한 명령과 범위는 [재현성 기록](docs/2026-09-09-review-reproducibility.md)에 있습니다.
 
 ## v2 기반 검증
 

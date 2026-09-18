@@ -195,3 +195,22 @@ Claude Code의 midnight-expert 플러그인으로 계약을 감사하고, 발견
 - relay를 통한 X25519 교환은 인증되지 않는다. relay 운영자는 키를 바꿔치기할 수 있다. relay는 Controller의 신뢰 경계 안에 있고 이전 설계부터 같은 경계였다.
 - 138 재시도 경로는 소스 근거와 로컬 테스트로만 확인했고 실제 체인에서 발동한 적은 없다.
 - 이 수정 이후의 새 클론 검증은 아직 실행하지 않았다.
+
+## 2026-09-18 보안 수정 커밋의 새 클론 검증
+
+공개 원격 `main`을 임시 디렉터리에 새로 클론했고 `HEAD`는 `999c1af43923d8ccba01a5136af1cccb927c49b3`이다. 환경과 제외 조건은 2026-09-17 새 클론 검증과 같다. API 키 환경 변수를 해제했고, 로컬 생성물을 재사용하지 않았다.
+
+| 명령 | 결과 |
+|---|---|
+| `git clone --depth 1` | 통과 (3초) |
+| `compact compile +0.31.1 --version` | 통과 |
+| `npm run bootstrap` | 통과 (125초) |
+| `npm run typecheck` | 통과 |
+| `npm test` | 46/46 통과 |
+| `npm --prefix apps/demo-web ci` | 통과 (36초) |
+| `npm --prefix apps/demo-web test` | 8/8 통과 |
+
+### 이후 추가한 것
+
+- `scripts/check-toolchain.mjs`: `bootstrap`과 `contract:compile`이 시작 전에 Node 버전, Compact CLI, compiler `0.31.1` 설치 여부를 점검한다. 빈 `COMPACT_DIRECTORY`(compiler 없음)와 `compact`가 없는 `PATH`에서 각각 설치 명령을 안내하고 종료 코드 1로 멈추는 것을 확인했다. 이전에는 compiler가 없으면 npm 오류 출력 속에 `Couldn't find compiler for aarch64-darwin (0.31.1)` 한 줄만 남았다.
+- 계약 테스트 추가: 제3자의 `authorizeHiddenPrice`, `cancelAsBuyer`, `cancelAsSeller`가 거절되고 ledger가 `OPEN`, `finalPrice 0`으로 유지된다. 계약 테스트 8/8, 루트 테스트 47/47 통과.
