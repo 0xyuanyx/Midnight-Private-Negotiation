@@ -220,3 +220,14 @@ Claude Code의 midnight-expert 플러그인으로 계약을 감사하고, 발견
 제출 영상을 만들려고 녹화한 프레임을 확인하던 중, 체인 모드에서 화면이 실제 상태보다 앞서 나가는 것을 발견했다. 비중첩 시연에서 Buyer·Seller 패널은 21:40:56에 "판매자 가격 커밋이 등록되었습니다"와 "협상을 시작합니다"를, 21:40:57부터 "AI 에이전트가 비공개 협상을 진행하고 있습니다"를 표시했다. 그런데 Observer가 체인에서 `OPEN`을 확인한 시각은 21:43:43이었다. 약 3분 동안 계약 배포와 참여가 진행 중인데도 등록·협상 중으로 보였다. 성공 시연도 21:36:00과 21:38:09로 같은 차이가 있었다. 실제 협상 시작(`START_RUNTIME`)은 이전부터 `OPEN` 이후로 막혀 있었으므로, 틀린 것은 표시뿐이었다.
 
 Controller는 두 역할의 오프체인 commitment가 준비되는 즉시 상대 커밋 등록 알림과 협상 시작 문구를 보냈다. 이제 체인 모드에서는 Observer가 `OPEN`을 확인한 뒤에만 이 문구를 보내고, 시각도 Observer의 확인 시각을 쓴다. 그 전까지는 "상대 가격 커밋 등록을 기다리고 있습니다" 행의 스피너가 계속 돈다. mock(비체인) 모드의 동작은 바꾸지 않았다. 루트 테스트 47/47, 웹 테스트 8/8 통과. 수정 후 로컬 체인에서 다시 녹화한 화면 텍스트로 확인했다. 성공 시연에서는 상대 커밋 등록 문구와 Observer `OPEN`이 모두 22:05:18, 비중첩 시연에서는 모두 22:10:40에 처음 나타났다. 두 시연은 각각 `SETTLED · 100,000,000 KRW`와 `CANCELLED · 공개된 금액 없음`으로 끝났다.
+
+## 2026-09-18 README·제출 양식 Midnight 주장 fact-check
+
+midnight-fact-check fast-check로 README와 제출 양식 초안에서 Midnight·Compact·SDK·계약·프라이버시 관련 주장 18개를 뽑아 소스로 검증했다. 확인 17, 반박 1, 판단 보류 0. 표준 절차와 달리 관련 주장을 묶어 source-investigator 5개로 검증했다. 계약 동작은 같은 날 실행 기반 PoC와 계약 테스트로도 확인했다.
+
+- 반박 1건: 상태 흐름을 `OPEN → AUTHORIZED → SETTLED`로만 적어 초기 상태 `WAITING_SELLER`가 빠져 있었다. README에 초기 상태와 `CANCELLED` 조건을 추가했다.
+- 표현 수정 2건:
+  - 합의가 대조는 계약이 아니라 **Seller 런타임의 오프체인 검사**임을 명시했다. 계약은 연 가격이 Buyer commitment와 같고 Seller 최저가 이상인지만 검사한다.
+  - `finalPrice`는 언제든 읽을 수 있는 공개 필드이며 `settle` 전까지 0이라고 고쳤다.
+- 확인한 근거 중 언어 의미론은 Compact 저장소에서 찾았다. `assert` 실패는 회로를 중단하고 회로 안에서 제약된다(`doc/compact-reference.mdx`). `disclose()`는 개발자의 공개 선언이다(`doc/explicit-disclosure.mdx`). `sealed` 필드는 exported circuit에서 쓸 수 없다(`compiler/analysis-passes/check-sealed-fields.ss`).
+- 보고서: `~/.midnight-expert/fact-checker/09-26/fast-run-negotiation-readme-dgHL/report.md`

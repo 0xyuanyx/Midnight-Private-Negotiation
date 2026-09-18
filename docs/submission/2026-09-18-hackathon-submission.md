@@ -42,7 +42,7 @@ npm --prefix apps/demo-web run dev -- --port 3001
 
 - **비공개 한도는 witness로만 존재한다.** Buyer 최대 한도와 Seller 최저 수용가는 계약의 witness로만 전달되고, 공개 ledger에는 `persistentHash`로 만든 commitment만 남는다. commitment는 `dealId`, 역할 태그, 공개키, 금액, 32바이트 난수를 묶어 도메인을 분리한다.
 - **협상 전에 한도를 고정하고, 정산 때 다시 검증한다.** Buyer 한도 commitment는 배포 시 생성자에서, Seller 한도 commitment는 `joinDeal`에서 기록된다. Controller는 체인에서 `OPEN`이 확인되기 전에는 협상을 시작하지 않는다. `authorizeHiddenPrice`는 합의 가격이 Buyer 한도 이하임을, `settle`은 Seller 한도 이상임을 각 commitment를 다시 계산해 증명한다. 협상 뒤에 다른 한도를 주장할 수 없다.
-- **최종 가격만 `SETTLED`에서 공개된다.** `disclose()`는 ledger에 쓰는 값에만 쓰며, `finalPrice`는 `settle` 안에서만 공개된다. 결렬되면 어떤 금액도 공개되지 않는다.
+- **최종 가격만 `SETTLED`에서 공개된다.** `disclose()`는 ledger에 쓰는 값에만 쓰며, `finalPrice`는 공개 필드이지만 `settle` 전까지 0이고, `settle` 안에서만 합의 가격이 기록된다. 결렬되면 어떤 금액도 공개되지 않는다.
 - **역할 권한은 비밀키에서 유도한 공개키로 검사한다.** 배포할 때 Buyer와 Seller의 공개키를 계약에 고정(`export sealed ledger`)하고, 각 회로가 `publicKey(secretKey()) == 고정된 키`를 검사한다. 제3자는 참여·승인·정산·취소를 할 수 없고, 계약 테스트로 확인한다.
 - **역할별 증명과 공개 상태 관찰을 분리했다.** Buyer와 Seller는 각자의 프로세스와 전용 proof server에서 트랜잭션을 만든다. Observer는 Indexer의 공개 상태만 읽어 `OPEN → AUTHORIZED → SETTLED` 또는 `CANCELLED`를 표시한다.
 - **AI는 한도를 모른다.** AI 요청에는 상품 코드, 공개 기준가격, 현재 제안, 라운드, 역할만 들어간다. 각 역할의 로컬 PolicyGuard와 StrategyGuard가 후보를 검사하고, 계약이 결과를 검증한다.
