@@ -22,7 +22,8 @@
     "midnight:down": "docker compose -f infra/midnight-local.yml down",
     "typecheck": "npm run sync-assets --workspace @midnight-negotiation/negotiation-contract && tsc -b --pretty false",
     "test": "npm run build && node --test packages/agent-core/test/*.test.mjs packages/protocol/test/*.test.mjs packages/negotiation-contract/test/*.test.mjs packages/room-relay/test/*.test.mjs packages/demo-controller/test/*.test.mjs",
-    "test:openai": "npm run build && node scripts/test-openai-negotiation.mjs"
+    "test:openai": "npm run build && node scripts/test-openai-negotiation.mjs",
+    "demo:local": "node scripts/demo-local.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

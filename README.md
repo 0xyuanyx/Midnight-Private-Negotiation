@@ -113,6 +113,22 @@ npm run demo:mock
 
 ## 실제 Midnight 로컬 체인 모드
 
+### 한 번에 실행하기 (권장)
+
+위 최초 설치(`bootstrap`과 웹 `npm ci`)를 마쳤고 Docker가 실행 중이면, 명령 하나로 로컬 Midnight 체인·Controller·웹을 함께 띄웁니다.
+
+```bash
+npm run demo:local
+```
+
+- 기본 포트(Node 9944, Indexer 8088, proof server 6301·6302, Controller 8787, 웹 3001)가 다른 프로젝트에서 사용 중이면 다음 빈 포트를 자동으로 고릅니다. 다른 로컬 Midnight 프로젝트를 멈출 필요가 없습니다.
+- 준비되면 열 주소와 시연 입력값을 출력합니다. 상품 코드 `4821`, 성공은 Buyer `110000000`·Seller `95000000`, 결렬은 초기화 뒤 Buyer `90000000`·Seller `95000000`입니다.
+- 협상 후보는 API 키 없이 mock 생성기로 만듭니다. 실제 OpenAI를 쓰려면 `OPENAI_API_KEY`를 설정하고 `npm run demo:local -- --openai`로 실행합니다.
+- 첫 실행은 Docker 이미지 다운로드가 있어 더 걸립니다. 준비된 뒤에도 첫 시연은 지갑 자금 준비·DUST 등록·증명 생성 때문에 결과까지 약 7분, 이후 시연은 2~4분 걸립니다. 2026-09-19 측정에서 준비 125초, 첫 성공 시연 424초, 이어진 결렬 시연 191초였습니다.
+- `Ctrl+C`로 끝내면 이 데모가 띄운 프로세스와 `negotiation-v2-*` 컨테이너만 내립니다.
+
+### 명령을 나눠 실행하기
+
 최초 실행에는 위 `bootstrap`을 사용합니다. Compact 계약 변경 후에는 고정된 compiler `0.31.1`로 생성물을 다시 준비합니다. 이후 데모 명령의 build 단계가 자산을 복사합니다.
 
 ```bash

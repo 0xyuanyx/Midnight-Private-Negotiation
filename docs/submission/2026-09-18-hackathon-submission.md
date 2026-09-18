@@ -31,12 +31,10 @@ compact update 0.31.1 --no-set-default
 npm run bootstrap
 npm test
 npm --prefix apps/demo-web ci
-npm run midnight:up
-NEGOTIATION_REFERENCE_PRICE_KRW=100000000 npm run demo:midnight:mock
-npm --prefix apps/demo-web run dev -- --port 3001
+npm run demo:local
 ```
 
-`http://localhost:3001`에서 Buyer와 Seller가 각각 상품 코드 `4821`을 입력한다. 성공은 Buyer `110000000` / Seller `95000000`, 결렬은 초기화 뒤 Buyer `90000000` / Seller `95000000`. `mock`은 API 키 없이 결정론적 후보 생성기를 쓴다. 실제 OpenAI 협상은 `npm run demo:midnight`와 API 키가 필요하다.
+`demo:local`은 Docker로 로컬 Midnight 체인을 띄우고 Controller와 웹을 함께 실행한다. 기본 포트가 사용 중이면 빈 포트를 자동으로 고르고, 준비되면 열 주소를 출력한다. 출력된 주소(기본 `http://localhost:3001`)에서 Buyer와 Seller가 각각 상품 코드 `4821`을 입력한다. 성공은 Buyer `110000000` / Seller `95000000`, 결렬은 초기화 뒤 Buyer `90000000` / Seller `95000000`. `mock`은 API 키 없이 결정론적 후보 생성기를 쓴다. 실제 OpenAI 협상은 `npm run demo:midnight`와 API 키가 필요하다.
 
 ## Midnight 구현 포인트
 

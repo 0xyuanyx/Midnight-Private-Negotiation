@@ -245,3 +245,23 @@ midnight-fact-check fast-check로 README와 제출 양식 초안에서 Midnight�
 | `npm test` | 47/47 통과 |
 | `npm --prefix apps/demo-web ci` | 통과 |
 | `npm --prefix apps/demo-web test` | 8/8 통과 |
+
+## 2026-09-19 한 번에 실행하는 로컬 데모
+
+심사위원은 저장소를 클론해 실행한다. 기존 절차는 터미널 3개가 필요했고, 다른 로컬 Midnight 프로젝트가 기본 포트 9944·8088을 쓰고 있으면 `npm run midnight:up`이 포트 충돌로 실패했다. 이 PC에서도 다른 프로젝트의 노드가 9944·8088·6300을 쓰고 있었다.
+
+`npm run demo:local`(`scripts/demo-local.mjs`)을 추가했다. 동작은 다음과 같다.
+
+- 설치와 Docker 상태를 점검한다.
+- Node·Indexer·proof server·Controller·웹 포트마다 빈 포트를 고른다. `infra/midnight-local.yml`의 proof server 포트도 환경 변수로 바꿀 수 있게 했다.
+- 로컬 체인, Controller(mock, 공개 기준가격 100000000), 웹을 함께 띄운 뒤 열 주소와 시연 입력값을 출력한다.
+- `Ctrl+C`를 누르면 자기가 띄운 프로세스와 `negotiation-v2-*` 컨테이너만 내린다.
+
+처음 구현에서는 웹 개발 서버의 Vite 의존성 최적화가 체인·지갑 시작과 겹치면서 멈춰 3분 제한을 넘겼다. 웹만 따로 띄우면 17~38초 안에 준비됐다. 실행 순서를 바꿔 웹을 먼저 띄우도록 고쳤다. 웹은 Controller가 준비되기 전까지 "연결 대기"만 표시한다.
+
+검증 결과(작업 폴더, 다른 프로젝트가 9944·8088·6300 사용 중):
+
+- 포트를 Node 9945, Indexer 8089로 자동 선택했다.
+- 준비까지 125초가 걸렸다.
+- 사람처럼 입력하는 브라우저 자동화로 성공 시연 `OPEN → AUTHORIZED → SETTLED · 100,000,000 KRW`(424초)와 결렬 시연 `OPEN → CANCELLED · 공개된 금액 없음`(191초)을 확인했다. 노드 오류 138은 발생하지 않았다.
+- `Ctrl+C`(SIGINT) 뒤 `negotiation-v2-*` 컨테이너와 Controller·runtime·웹 프로세스가 모두 정리됐다. 다른 프로젝트의 컨테이너는 그대로 남았다.

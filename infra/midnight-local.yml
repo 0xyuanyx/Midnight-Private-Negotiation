@@ -4,7 +4,7 @@ services:
     container_name: negotiation-v2-buyer-proof
     command: ["midnight-proof-server -v"]
     ports:
-      - "6301:6300"
+      - "${MIDNIGHT_BUYER_PROOF_HOST_PORT:-6301}:6300"
     environment:
       RUST_BACKTRACE: full
 
@@ -13,7 +13,7 @@ services:
     container_name: negotiation-v2-seller-proof
     command: ["midnight-proof-server -v"]
     ports:
-      - "6302:6300"
+      - "${MIDNIGHT_SELLER_PROOF_HOST_PORT:-6302}:6300"
     environment:
       RUST_BACKTRACE: full
 
