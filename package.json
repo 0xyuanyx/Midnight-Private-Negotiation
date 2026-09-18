@@ -18,7 +18,7 @@
     "demo:midnight": "NEGOTIATION_AI_PROVIDER=openai MIDNIGHT_MODE=local npm run demo:controller:base",
     "demo:midnight:mock": "NEGOTIATION_AI_PROVIDER=mock MIDNIGHT_MODE=local npm run demo:controller:base",
     "demo:midnight:ai": "npm run demo:midnight",
-    "midnight:up": "docker compose -f infra/midnight-local.yml up -d --wait",
+    "midnight:up": "node scripts/ensure-local-env.mjs && docker compose -f infra/midnight-local.yml up -d --wait",
     "midnight:down": "docker compose -f infra/midnight-local.yml down",
     "typecheck": "npm run sync-assets --workspace @midnight-negotiation/negotiation-contract && tsc -b --pretty false",
     "test": "npm run build && node --test packages/agent-core/test/*.test.mjs packages/protocol/test/*.test.mjs packages/negotiation-contract/test/*.test.mjs packages/room-relay/test/*.test.mjs packages/demo-controller/test/*.test.mjs",

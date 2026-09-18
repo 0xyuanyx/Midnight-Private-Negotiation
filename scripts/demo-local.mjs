@@ -145,6 +145,9 @@ try {
   webReady.catch(() => {});
 
   log("로컬 Midnight 체인을 시작합니다 (처음에는 이미지 다운로드로 몇 분 걸릴 수 있습니다).");
+  if (spawnSync("node", ["scripts/ensure-local-env.mjs"], { cwd: root, stdio: "inherit" }).status !== 0) {
+    await fail("로컬 인덱서 설정 파일을 만들지 못했습니다.");
+  }
   if (compose(["up", "-d", "--wait"], composeEnv).status !== 0) {
     await fail("로컬 체인을 시작하지 못했습니다. 위 Docker 로그를 확인하세요.");
   }
