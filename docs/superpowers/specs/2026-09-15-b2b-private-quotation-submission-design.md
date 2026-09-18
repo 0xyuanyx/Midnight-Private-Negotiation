@@ -1,6 +1,6 @@
 # B2B 비공개 견적 협상 제출 설계
 
-상태: 2026-09-17 구현 반영. 검증 결과는 `README.md`와 `docs/2026-09-09-review-reproducibility.md`를 확인한다.
+상태: 2026-09-17 구현 반영. 검증 결과는 `README.md`와 `docs/2026-09-09-review-reproducibility.md`를 확인한다. 2026-09-18에 제출 시나리오를 하도급 부품 납품 단가 협상으로 교체했다. 아래 GPU 서버 시나리오는 이력이며, 현재 결정은 `PROJECT_DIRECTION.md`를 따른다. 신뢰 경계·범위·완료 기준은 그대로 유효하다.
 
 ## 목표
 

@@ -1,6 +1,6 @@
 # B2B 비공개 견적 협상 제출 구현 계획
 
-상태: 2026-09-17 구현 반영. 아래 체크리스트는 당시 작업 순서의 기록이며, 최신 검증 결과는 `README.md`와 `docs/2026-09-09-review-reproducibility.md`가 기준이다.
+상태: 2026-09-17 구현 반영. 아래 체크리스트는 당시 작업 순서의 기록이며, 최신 검증 결과는 `README.md`와 `docs/2026-09-09-review-reproducibility.md`가 기준이다. 2026-09-18에 화면 헤더와 문서의 시나리오를 하도급 부품 납품 단가 협상으로 교체했으므로 아래 GPU 서버 문구는 이력이다.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
