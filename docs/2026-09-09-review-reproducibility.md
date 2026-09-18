@@ -231,3 +231,17 @@ midnight-fact-check fast-check로 README와 제출 양식 초안에서 Midnight�
   - `finalPrice`는 언제든 읽을 수 있는 공개 필드이며 `settle` 전까지 0이라고 고쳤다.
 - 확인한 근거 중 언어 의미론은 Compact 저장소에서 찾았다. `assert` 실패는 회로를 중단하고 회로 안에서 제약된다(`doc/compact-reference.mdx`). `disclose()`는 개발자의 공개 선언이다(`doc/explicit-disclosure.mdx`). `sealed` 필드는 exported circuit에서 쓸 수 없다(`compiler/analysis-passes/check-sealed-fields.ss`).
 - 보고서: `~/.midnight-expert/fact-checker/09-26/fast-run-negotiation-readme-dgHL/report.md`
+
+## 2026-09-19 최종 커밋 새 클론 검증
+
+공개 원격 `main`을 새로 클론했고 `HEAD`는 `beef1d975d280316bb0802d9125e4709c5ccb15e`이다. 조건은 이전 새 클론 검증과 같다.
+
+| 명령 | 결과 |
+|---|---|
+| `git clone --depth 1` | 통과 |
+| `compact compile +0.31.1 --version` | 통과 |
+| `npm run bootstrap` (도구 점검 포함) | 통과 (50초) |
+| `npm run typecheck` | 통과 |
+| `npm test` | 47/47 통과 |
+| `npm --prefix apps/demo-web ci` | 통과 |
+| `npm --prefix apps/demo-web test` | 8/8 통과 |
