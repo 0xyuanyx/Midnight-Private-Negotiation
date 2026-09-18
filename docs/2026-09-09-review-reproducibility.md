@@ -265,3 +265,20 @@ midnight-fact-check fast-check로 README와 제출 양식 초안에서 Midnight�
 - 준비까지 125초가 걸렸다.
 - 사람처럼 입력하는 브라우저 자동화로 성공 시연 `OPEN → AUTHORIZED → SETTLED · 100,000,000 KRW`(424초)와 결렬 시연 `OPEN → CANCELLED · 공개된 금액 없음`(191초)을 확인했다. 노드 오류 138은 발생하지 않았다.
 - `Ctrl+C`(SIGINT) 뒤 `negotiation-v2-*` 컨테이너와 Controller·runtime·웹 프로세스가 모두 정리됐다. 다른 프로젝트의 컨테이너는 그대로 남았다.
+
+## 2026-09-19 새 클론 심사위원 경로 재현
+
+공개 원격 `main`(`dd83d6869a13bce4c15b2fb080d1c252116fecf8`)을 새로 클론해, 심사위원이 할 순서 그대로 실행했다. API 키를 해제한 셸을 썼고, 이 PC에서는 다른 로컬 Midnight 프로젝트가 9944·8088·6300을 쓰고 있었다.
+
+| 단계 | 결과 |
+|---|---|
+| `npm run bootstrap` | 통과 (108초) |
+| `npm --prefix apps/demo-web ci` | 통과 (42초) |
+| `npm run demo:local` | 준비 45초. Node 9945·Indexer 8089 자동 선택, 인덱서 설정 파일 자동 생성 |
+| 성공 시연 (브라우저 자동화) | `OPEN → AUTHORIZED → SETTLED · 100,000,000 KRW` (281초) |
+| 결렬 시연 | `OPEN → CANCELLED · 공개된 금액 없음` (167초) |
+| 노드 오류 138 | 0회 |
+
+이 재현으로 이전부터 있던 결함을 하나 찾아 고쳤다. 인덱서 설정 파일 `infra/midnight-local.env`는 내부 비밀번호와 secret이라 `*.env` 규칙으로 Git에서 빠져 있다. 그래서 새 클론에서는 `npm run midnight:up`도 `env file ... not found`로 곧바로 실패했다. 이전 새 클론 검증은 설치·테스트까지만 해서 드러나지 않았다. `scripts/ensure-local-env.mjs`가 파일이 없을 때 같은 형식의 임의 값으로 만들도록 했다(권한 600, 기존 파일은 덮어쓰지 않음). 위 재현에서 인덱서가 생성된 값으로 정상 동작했다.
+
+종료 처리는 따로 확인했다. 실행기가 `Ctrl+C`(SIGINT) 외에 터미널 창을 닫을 때의 SIGHUP도 처리하도록 했다. 작업 폴더에서 SIGHUP을 보내 이 데모의 컨테이너와 프로세스가 모두 정리되고 다른 프로젝트 컨테이너는 남는 것을 확인했다. 새 클론 재현 스크립트의 종료 단계는 실행기 프로세스를 절대 경로로 찾다가 실패해 실행되지 않았다(실행기 명령줄은 상대 경로다). 남은 컨테이너와 프로세스는 수동으로 정리했다.

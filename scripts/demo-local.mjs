@@ -83,8 +83,11 @@ async function shutdown(code = 0) {
   if (composeEnv !== undefined) compose(["down"], composeEnv);
   process.exit(code);
 }
-process.on("SIGINT", () => void shutdown(0));
-process.on("SIGTERM", () => void shutdown(0));
+// SIGHUP arrives when the terminal window is closed; the detached children would
+// otherwise outlive the launcher.
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => void shutdown(0));
+}
 
 const waitFor = (predicate, timeoutMs, what) =>
   new Promise((resolve, reject) => {
