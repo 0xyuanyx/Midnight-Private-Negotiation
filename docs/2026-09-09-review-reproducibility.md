@@ -214,3 +214,9 @@ Claude Code의 midnight-expert 플러그인으로 계약을 감사하고, 발견
 
 - `scripts/check-toolchain.mjs`: `bootstrap`과 `contract:compile`이 시작 전에 Node 버전, Compact CLI, compiler `0.31.1` 설치 여부를 점검한다. 빈 `COMPACT_DIRECTORY`(compiler 없음)와 `compact`가 없는 `PATH`에서 각각 설치 명령을 안내하고 종료 코드 1로 멈추는 것을 확인했다. 이전에는 compiler가 없으면 npm 오류 출력 속에 `Couldn't find compiler for aarch64-darwin (0.31.1)` 한 줄만 남았다.
 - 계약 테스트 추가: 제3자의 `authorizeHiddenPrice`, `cancelAsBuyer`, `cancelAsSeller`가 거절되고 ledger가 `OPEN`, `finalPrice 0`으로 유지된다. 계약 테스트 8/8, 루트 테스트 47/47 통과.
+
+## 2026-09-18 체인 모드 표시 순서 수정
+
+제출 영상을 만들려고 녹화한 프레임을 확인하던 중, 체인 모드에서 화면이 실제 상태보다 앞서 나가는 것을 발견했다. 비중첩 시연에서 Buyer·Seller 패널은 21:40:56에 "판매자 가격 커밋이 등록되었습니다"와 "협상을 시작합니다"를, 21:40:57부터 "AI 에이전트가 비공개 협상을 진행하고 있습니다"를 표시했다. 그런데 Observer가 체인에서 `OPEN`을 확인한 시각은 21:43:43이었다. 약 3분 동안 계약 배포와 참여가 진행 중인데도 등록·협상 중으로 보였다. 성공 시연도 21:36:00과 21:38:09로 같은 차이가 있었다. 실제 협상 시작(`START_RUNTIME`)은 이전부터 `OPEN` 이후로 막혀 있었으므로, 틀린 것은 표시뿐이었다.
+
+Controller는 두 역할의 오프체인 commitment가 준비되는 즉시 상대 커밋 등록 알림과 협상 시작 문구를 보냈다. 이제 체인 모드에서는 Observer가 `OPEN`을 확인한 뒤에만 이 문구를 보내고, 시각도 Observer의 확인 시각을 쓴다. 그 전까지는 "상대 가격 커밋 등록을 기다리고 있습니다" 행의 스피너가 계속 돈다. mock(비체인) 모드의 동작은 바꾸지 않았다. 루트 테스트 47/47, 웹 테스트 8/8 통과. 수정 후 로컬 체인에서 다시 녹화한 화면 텍스트로 확인했다. 성공 시연에서는 상대 커밋 등록 문구와 Observer `OPEN`이 모두 22:05:18, 비중첩 시연에서는 모두 22:10:40에 처음 나타났다. 두 시연은 각각 `SETTLED · 100,000,000 KRW`와 `CANCELLED · 공개된 금액 없음`으로 끝났다.

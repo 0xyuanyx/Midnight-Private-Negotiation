@@ -578,6 +578,12 @@ export class IsolatedRuntimeController {
     if (!chainMode || event.audience !== "PUBLIC") return;
     if (event.state === "OPEN") {
       this.#chainOpenSessions.add(event.sessionId);
+      if (this.#peerReadySessions.has(event.sessionId)) {
+        const correlationId = createRequestId();
+        this.#emitPeerCommitmentNotice("buyer", event.sessionId, event.occurredAt, correlationId);
+        this.#emitPeerCommitmentNotice("seller", event.sessionId, event.occurredAt, correlationId);
+        this.#announceNegotiation(event.sessionId);
+      }
       this.#tryStartNegotiation(event.sessionId);
       return;
     }
@@ -754,7 +760,9 @@ export class IsolatedRuntimeController {
     const noticeKey = `${role}:${sessionId}`;
     if (
       this.#commitmentSessions.get(peer) !== sessionId ||
-      this.#peerCommitmentNotices.has(noticeKey)
+      this.#peerCommitmentNotices.has(noticeKey) ||
+      // On chain a commitment counts as registered only once the Observer sees OPEN.
+      (chainMode && !this.#chainOpenSessions.has(sessionId))
     ) {
       return;
     }
@@ -779,7 +787,8 @@ export class IsolatedRuntimeController {
   #announceNegotiation(sessionId: string): void {
     if (
       this.#negotiationAnnouncedSessions.has(sessionId) ||
-      this.#finishedSessions.has(sessionId)
+      this.#finishedSessions.has(sessionId) ||
+      (chainMode && !this.#chainOpenSessions.has(sessionId))
     ) {
       return;
     }
