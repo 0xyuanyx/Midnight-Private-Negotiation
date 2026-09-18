@@ -36,7 +36,7 @@ Observer에서 `OPEN → AUTHORIZED → SETTLED`를 확인하고, **최종 합�
 node --test packages/negotiation-contract/test/contract.test.mjs
 ```
 
-`rejects third-party settlement and leaves the authorized ledger unchanged` 테스트가 통과한 줄을 보여준다. Seller의 비밀키와 다른 제3자 비밀키로 `settle`을 시도하면 계약이 거절하며, 공개 상태는 `AUTHORIZED`, 최종 가격은 `0`으로 남는다. 이것은 UI 버튼이 아닌 계약 회귀 테스트다.
+`pins the Seller at deployment and rejects a third-party joinDeal`과 `rejects third-party settlement and leaves the authorized ledger unchanged` 테스트가 통과한 줄을 보여준다. 계약은 배포할 때 Seller 공개키를 고정하므로, 제3자 비밀키로는 거래에 참여(`joinDeal`)할 수도 정산(`settle`)할 수도 없다. 정산 시도가 거절되면 공개 상태는 `AUTHORIZED`, 최종 가격은 `0`으로 남는다. 이것은 UI 버튼이 아닌 계약 회귀 테스트다.
 
 ## 5. 마무리
 

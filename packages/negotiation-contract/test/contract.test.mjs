@@ -32,6 +32,7 @@ const createSimulation = (input) => {
   const buyerSecretKey = hexToBytes(input.buyerSecretKey);
   const sellerSecretKey = hexToBytes(input.sellerSecretKey);
   const buyerKey = publicKeyForSecret(buyerSecretKey);
+  const sellerKey = publicKeyForSecret(sellerSecretKey);
   const buyerState = {
     role: "buyer",
     buyerSecretKey,
@@ -51,6 +52,7 @@ const createSimulation = (input) => {
     createConstructorContext(buyerState, "0".repeat(64)),
     dealId,
     buyerKey,
+    sellerKey,
     limitCommitment(
       dealId,
       "negotiation:buyer:",
@@ -70,6 +72,19 @@ const createSimulation = (input) => {
     join: () => {
       context.currentPrivateState = sellerState;
       context = contract.impureCircuits.joinDeal(context).context;
+    },
+    joinAsThirdParty: () => {
+      context.currentPrivateState = {
+        ...sellerState,
+        sellerSecretKey: hexToBytes("99".repeat(32)),
+        sellerMinPrice: 0n,
+      };
+      context = contract.impureCircuits.joinDeal(context).context;
+    },
+    sellerKey,
+    cancelAsSeller: () => {
+      context.currentPrivateState = sellerState;
+      context = contract.impureCircuits.cancelAsSeller(context).context;
     },
     authorize: () => {
       context.currentPrivateState = buyerState;
@@ -145,6 +160,24 @@ test("rejects third-party settlement and leaves the authorized ledger unchanged"
   assert.throws(() => simulation.settleAsThirdParty(), /assert/i);
   assert.equal(simulation.ledger().status, Negotiation.DealStatus.AUTHORIZED);
   assert.equal(simulation.ledger().finalPrice, 0n);
+});
+
+test("pins the Seller at deployment and rejects a third-party joinDeal", () => {
+  const simulation = createSimulation(scenario());
+  assert.deepEqual(simulation.ledger().sellerKey, simulation.sellerKey);
+  assert.throws(() => simulation.joinAsThirdParty(), /caller is not seller/);
+  assert.equal(simulation.ledger().status, Negotiation.DealStatus.WAITING_SELLER);
+
+  simulation.join();
+  assert.equal(simulation.ledger().status, Negotiation.DealStatus.OPEN);
+  assert.deepEqual(simulation.ledger().sellerKey, simulation.sellerKey);
+});
+
+test("lets the pinned Seller cancel before joining, which closes the deal", () => {
+  const simulation = createSimulation(scenario());
+  simulation.cancelAsSeller();
+  assert.equal(simulation.ledger().status, Negotiation.DealStatus.CANCELLED);
+  assert.throws(() => simulation.join(), /deal is not waiting for seller/);
 });
 
 test("enforces the Uint64 price boundary in off-chain commitments", () => {

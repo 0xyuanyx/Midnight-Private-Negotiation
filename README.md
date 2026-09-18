@@ -46,7 +46,7 @@
 
 공용 프로토콜, 별도 역할 프로세스, WebSocket Controller와 3패널 웹 DApp이 구현되어 있습니다. 브라우저는 로그를 자체 생성하지 않고 검증된 런타임 이벤트만 표시합니다. mock과 실제 OpenAI provider는 공개 기준가·현재 제안·라운드만으로 최대 다섯 후보를 생성하고, 각 역할의 로컬 `PolicyGuard`와 `StrategyGuard`가 자기 한도와 가격 전략에 맞는지 검사합니다. 외부 AI가 없거나 모든 후보가 정책을 통과하지 못하면 역할 런타임 내부의 결정론적 fallback이 제안·수락을 이어받습니다. 한도는 Controller를 거쳐 대상 역할 런타임에 전달되지만 GPT 입력이나 로그에는 포함되지 않습니다. 실패 후보와 stateless 재요청도 화면·IPC·Relay에 노출되지 않습니다. Room Relay는 Controller와 분리된 네 번째 프로세스로 실행되며 Buyer·Seller가 로컬 TCP로 직접 연결합니다. 역할 간 협상 패킷은 임시 X25519 공유 비밀에서 HKDF-SHA-256 세션 키를 만들고, 방·역할·순번을 AAD로 묶은 AES-256-GCM 암호문만 Relay에 전달합니다.
 
-Midnight 로컬 체인 모드에서는 Buyer가 계약을 배포하고, Seller가 `joinDeal`, Buyer가 `authorizeHiddenPrice`, Seller가 `settle`을 각각 자기 프로세스와 전용 proof server에서 실행합니다. Controller의 타이머가 공개 상태를 만들지 않으며, 지갑이 보고한 트랜잭션 완료 뒤에도 Observer가 Indexer에서 `OPEN → AUTHORIZED → SETTLED`를 확인해야 웹에 표시됩니다. Buyer·Seller 한도는 계약의 witness로만 사용되고 공개 ledger에는 commitment만 남으며, `finalPrice`는 `SETTLED`에서만 공개됩니다. 새 코드에서는 `counter` 레거시 명칭을 사용하지 않습니다.
+Midnight 로컬 체인 모드에서는 Seller가 암호화 relay로 자기 공개키를 먼저 보내고, Buyer가 그 키를 생성자에 고정해 계약을 배포합니다. 이후 Seller가 `joinDeal`, Buyer가 `authorizeHiddenPrice`, Seller가 `settle`을 각각 자기 프로세스와 전용 proof server에서 실행합니다. `joinDeal`은 배포 시 고정된 Seller 키로만 호출할 수 있으므로 제3자가 Seller 자리를 먼저 차지할 수 없습니다. Seller는 협상에서 합의한 가격과 Buyer가 여는 가격이 다르면 정산하지 않고 거래를 취소합니다. Controller의 타이머가 공개 상태를 만들지 않으며, 지갑이 보고한 트랜잭션 완료 뒤에도 Observer가 Indexer에서 `OPEN → AUTHORIZED → SETTLED`를 확인해야 웹에 표시됩니다. Buyer·Seller 한도는 계약의 witness로만 사용되고 공개 ledger에는 commitment만 남으며, `finalPrice`는 `SETTLED`에서만 공개됩니다. 새 코드에서는 `counter` 레거시 명칭을 사용하지 않습니다.
 
 한 역할이 늦게 입장했을 때 상대가 이미 입장했거나 상대 가격 커밋이 이미 준비되어 있으면 완료 이벤트를 먼저 동기화하고 불필요한 대기 로그를 만들지 않습니다. 대기 로그는 아직 충족되지 않은 상태에만 회전 아이콘과 함께 표시됩니다. 화면에는 같은 4자리 상품 코드를 유지하지만 내부 session ID는 브라우저 데모 인스턴스별로 분리하므로, 페이지를 새로 열어 같은 코드를 사용해도 이전 실행 상태와 섞이지 않습니다.
 
@@ -202,10 +202,10 @@ npm run test:openai
 | 요청 데이터 경계 | 완료 | 공개 필드만 전송, `store: false`, strict JSON schema |
 | PolicyGuard·fallback | 완료 | API 실패 후 역할 로컬 fallback으로 `SETTLED` 완료 |
 | 실제 모델 협상 품질 | 완료 | 2026-09-11 `gpt-5.6-sol` 31회 요청, 모델 선택 5회, 합의 2건 `SETTLED` |
-| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-17 시나리오 교체 전 헤더 문구(GPU 서버 10대)와 같은 협상·계약 로직으로 `OPEN → AUTHORIZED → SETTLED`와 `OPEN → CANCELLED · 공개된 금액 없음` 확인. 제3자 정산 거절 계약 테스트 5/5 통과 |
+| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-18 Seller 고정 계약으로 성공 `OPEN → AUTHORIZED → SETTLED · 100,000,000 KRW`(입력 순서 두 가지 각 1회)와 결렬 `OPEN → CANCELLED · 공개된 금액 없음` 확인. 제3자 정산·제3자 참여 거절을 포함한 계약 테스트 7/7 통과 |
 | 공개 테스트넷·메인넷 | 미실행 | 현재 데모는 공개 네트워크 배포를 주장하지 않음 |
 
-이번 제출 변경 후 루트 테스트는 44/44, 웹 테스트는 8/8 통과했습니다. 2026-09-17에 공개 원격의 최종 커밋 `4d95515`를 새로 클론해 `compact compile +0.31.1`, `npm run bootstrap`, `npm run typecheck`, 루트 테스트 44/44, 웹 `npm ci`와 웹 테스트 8/8이 모두 통과하는 것을 확인했습니다. 이 새 클론 검증에는 Docker 로컬 체인 재기동이 포함되지 않았고, 공개 테스트넷 배포와 호스팅된 라이브 데모 URL도 준비되지 않았습니다. 자세한 명령과 범위는 [재현성 기록](docs/2026-09-09-review-reproducibility.md)에 있습니다.
+2026-09-18 보안 수정 후 루트 테스트는 46/46, 웹 테스트는 8/8 통과했습니다. 아래 새 클론 검증은 보안 수정 이전 커밋 기준입니다. 2026-09-17에 공개 원격의 최종 커밋 `4d95515`를 새로 클론해 `compact compile +0.31.1`, `npm run bootstrap`, `npm run typecheck`, 루트 테스트 44/44, 웹 `npm ci`와 웹 테스트 8/8이 모두 통과하는 것을 확인했습니다. 이 새 클론 검증에는 Docker 로컬 체인 재기동이 포함되지 않았고, 공개 테스트넷 배포와 호스팅된 라이브 데모 URL도 준비되지 않았습니다. 자세한 명령과 범위는 [재현성 기록](docs/2026-09-09-review-reproducibility.md)에 있습니다.
 
 ## v2 기반 검증
 

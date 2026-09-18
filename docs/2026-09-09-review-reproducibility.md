@@ -141,3 +141,57 @@ npm test
 **이 검증에 포함되지 않은 것:** 새 클론에서 Docker 로컬 체인을 다시 기동한 실행, 공개 테스트넷·메인넷 배포, 호스팅된 라이브 URL, 이번 변경에 대한 실제 OpenAI API 협상 평가. 로컬 체인 성공·결렬 시연은 같은 날 원본 작업 폴더에서 확인한 위 항목이 근거이며 새 클론에서 재현하지 않았다.
 
 별도로 OpenAI provider 배선을 실제 API 1회 호출로 확인했다. `gpt-5.6-sol`이 strict Structured Outputs로 후보 5개를 반환했고 모두 250 KRW 단위와 Buyer StrategyGuard를 통과했다. 요청 본문에는 `role`, `productCode`, `round`, `publicReferencePrice`만 포함됐고 `store`는 `false`였다. 이는 배선 확인이며 2026-09-11의 31회 협상 평가를 대체하지 않는다.
+
+## 2026-09-18 보안 감사와 수정
+
+Claude Code의 midnight-expert 플러그인으로 계약을 감사하고, 발견한 문제를 `fix/seller-slot-binding` 브랜치에서 수정했다.
+
+### 감사에서 확인한 문제
+
+- **H-1 Seller 자리 탈취 (실행으로 확인):** `joinDeal`에 호출자 검사가 없었다. 공격자 비밀키로 먼저 `joinDeal`을 호출하면 성공했고, 정상 Seller의 `joinDeal`은 `deal is not waiting for seller`로 실패했으며, 공격자가 `cancelAsSeller`로 거래를 취소할 수 있었다. midnight-verify witness-verifier가 실제 계약과 witness로 PoC를 실행해 확인했다.
+- **M-1 합의가 미대조:** Seller runtime이 Buyer가 여는 가격을 합의 가격과 비교하지 않고 바로 정산했다. 계약은 한도만 검사한다.
+- **L-1:** 생성자에서만 쓰는 필드가 `sealed`가 아니었다.
+
+### 수정
+
+- 계약 생성자가 Seller 공개키를 받아 `sellerKey`로 고정하고, `joinDeal`이 `publicKey(sellerSecretKey()) == sellerKey`를 검사한다. `dealId`, `buyerKey`, `sellerKey`, `buyerCommitment`를 `export sealed ledger`로 선언했다.
+- Seller가 암호화 relay로 `seller_key`를 보내고, Buyer는 그 키를 받은 뒤 한 번만 배포한다.
+- Seller는 합의한 가격을 기록하고, 다른 가격이 열리면 정산하지 않고 `cancelAsSeller`로 취소한다. 합의 후에는 추가 협상 메시지를 거부한다. Controller가 Seller의 `CANCELLED` 보고를 받도록 했다.
+- 기존 경쟁 조건: `tryJoinOnChain`이 두 경로에서 동시에 실행돼 `joinDeal`이 두 번 호출될 수 있었다. 시작 플래그로 막았다. 배포와 참여는 대기 중 세션이 바뀌면 공유 상태를 바꾸지 않고 멈춘다.
+- 기존 버그: 지갑 초기화 실패가 처리되지 않은 promise 거절로 runtime 프로세스를 종료시켰다. 로컬 체인 실행 중 Seller runtime이 이 경로로 종료되는 것을 관측했다. 이제 프로세스는 유지되고 화면에 `Midnight 거래를 완료하지 못했습니다.`가 표시된다.
+
+### 노드 오류 138의 원인과 수정
+
+로컬 체인에서 Seller 지갑의 DUST 등록이 간헐적으로 `1010: Invalid Transaction: Custom error: 138`로 거절됐다. midnight-status-codes 조회 결과 138은 `BalanceCheckOverspend`다.
+
+- genesis 지갑의 DUST는 `1.249 × 10^24`로 충분해 funder 원인은 배제했다.
+- 격리 실험에서 등록 직후 runtime 지갑의 DUST는 `3.06 × 10^18`으로 수수료 오버헤드보다 충분히 컸다.
+- midnight-verify source-investigator가 wallet-sdk-facade·dust-wallet 3.0.0(`midnight-wallet@a1da646`)과 ledger-v8 소스를 확인했다. 등록 수수료는 등록하는 NIGHT UTXO가 생성 후 만든 DUST(`generatedNow`)로 지불되고, 이 값은 UTXO 생성 시각부터의 경과 시간에 비례한다. 반면 수수료에는 이 프로젝트의 `additionalFeeOverhead` `3 × 10^14`가 항상 더해진다. 방금 받은 UTXO로 즉시 등록하면 부족해진다. Seller는 funder의 두 번째 이체를 받으므로 가장 자주 영향을 받는다.
+- 같은 조사에서 거절된 등록 트랜잭션은 코인을 사용 중으로 표시하지 않아 재시도 시 같은 코인이 다시 보인다는 것도 확인했다.
+- 수정: 등록이 138로 거절되면 5초 뒤 최대 6회 재시도한다. 138이 아닌 오류는 재시도하지 않는다. wallet SDK의 Effect `FiberFailure`는 원인을 `.cause`가 아닌 Symbol 속성에 담아서, 오류 구조 전체를 검사하도록 구현하고 로컬 테스트로 확인했다.
+- 재현 실험 2회에서는 138이 다시 나오지 않았다. 최종 로컬 체인 실행에서도 138이 발생하지 않아 재시도 경로 자체는 실제 체인에서 실행되지 않았다.
+
+### 검증
+
+- midnight-verify witness-verifier: 수정된 계약을 실제로 실행해 제3자 `joinDeal`·`cancelAsSeller` 거절, 정상 흐름 `SETTLED` 100000, `sealed` 필드의 회로 쓰기 컴파일 거부를 확인했다. `witnesses.ts` 타입 검사와 구조 검사를 통과했다.
+- compact-core security-reviewer 재검토 2회: 1차에서 새 Critical·High 없음, Medium 1건(재입장 시 Seller 키 미전송)과 Low 4건. 2차(최종)에서 Critical·High·Medium 없음, Low 2건과 제안 2건. 최종 검토 뒤 다음을 추가로 반영했다.
+  - Buyer가 같은 Seller 키의 재전송은 무시하고, 다른 키만 거부한다.
+  - Seller의 정산이 실패하면 온체인에서 취소한다.
+  - `AUTHORIZED` 뒤 Seller가 취소하면 Controller가 "기록 중" 진행 행을 같은 교체 키로 끝내고 보관한 합의 금액을 지운다.
+  - DUST 등록 후 잔액 대기에 180초 제한을 둔다.
+- `npm test` 46/46, `npm --prefix apps/demo-web test` 8/8, 계약 테스트 7/7 통과.
+- 로컬 체인(Node 9945, Indexer 8089, proof server 6301·6302, mock 협상, 공개 기준가격 100000000):
+  - 성공, Buyer 한도 먼저 입력: Buyer `110000000` / Seller `95000000` → `OPEN 14:07:58 → AUTHORIZED 14:09:09 → SETTLED 14:10:03 · 100,000,000 KRW`
+  - 성공, Seller 한도 먼저 입력: `OPEN 14:28:13 → AUTHORIZED 14:28:51 → SETTLED 14:29:32 · 100,000,000 KRW`
+  - 결렬, Buyer 한도 먼저 입력: Buyer `90000000` / Seller `95000000` → `OPEN 14:32:46 → CANCELLED 14:33:26 · 공개된 금액 없음`
+  - 최종 코드로 다시 실행한 성공(Buyer 먼저): `OPEN 14:41:14 → AUTHORIZED 14:42:24 → SETTLED 14:42:56 · 100,000,000 KRW`
+  - 최종 코드로 다시 실행한 결렬(Seller 먼저): `OPEN 14:45:57 → CANCELLED 14:46:29 · 공개된 금액 없음`
+  - 모든 실행에서 상대 한도가 다른 패널에 표시되지 않았고, Observer에도 한도가 표시되지 않았다.
+  - 한 번은 테스트를 조작하던 중 실수로 두 한도에 모두 `4821`을 입력했다. 제품 결함이 아니므로 결과에서 제외했다.
+- 새 동작: 배포 시 Seller가 고정되므로 정상 Seller는 참여 전(`WAITING_SELLER`)에도 취소할 수 있다. 계약 테스트로 고정했다.
+
+### 남은 한계
+
+- relay를 통한 X25519 교환은 인증되지 않는다. relay 운영자는 키를 바꿔치기할 수 있다. relay는 Controller의 신뢰 경계 안에 있고 이전 설계부터 같은 경계였다.
+- 138 재시도 경로는 소스 근거와 로컬 테스트로만 확인했고 실제 체인에서 발동한 적은 없다.
+- 이 수정 이후의 새 클론 검증은 아직 실행하지 않았다.

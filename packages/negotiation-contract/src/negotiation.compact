@@ -10,10 +10,10 @@ export enum DealStatus {
   CANCELLED
 }
 
-export ledger dealId: Bytes<32>;
-export ledger buyerKey: Bytes<32>;
-export ledger sellerKey: Bytes<32>;
-export ledger buyerCommitment: Bytes<32>;
+export sealed ledger dealId: Bytes<32>;
+export sealed ledger buyerKey: Bytes<32>;
+export sealed ledger sellerKey: Bytes<32>;
+export sealed ledger buyerCommitment: Bytes<32>;
 export ledger sellerCommitment: Bytes<32>;
 export ledger priceCommitment: Bytes<32>;
 export ledger finalPrice: Uint<64>;
@@ -33,11 +33,12 @@ witness sellerLimitRandomness(): Bytes<32>;
 constructor(
   _dealId: Bytes<32>,
   _buyerKey: Bytes<32>,
+  _sellerKey: Bytes<32>,
   _buyerCommitment: Bytes<32>
 ) {
   dealId = disclose(_dealId);
   buyerKey = disclose(_buyerKey);
-  sellerKey = disclose(pad(32, ""));
+  sellerKey = disclose(_sellerKey);
   buyerCommitment = disclose(_buyerCommitment);
   sellerCommitment = disclose(pad(32, ""));
   priceCommitment = disclose(pad(32, ""));
@@ -47,16 +48,15 @@ constructor(
 
 export circuit joinDeal(): [] {
   assert(status == DealStatus.WAITING_SELLER, "deal is not waiting for seller");
+  assert(publicKey(sellerSecretKey()) == sellerKey, "caller is not seller");
 
-  const joinedSellerKey = publicKey(sellerSecretKey());
   const joinedSellerCommitment = limitCommitment(
     pad(32, "negotiation:seller:"),
-    joinedSellerKey,
+    sellerKey,
     sellerMinPrice(),
     sellerLimitRandomness()
   );
 
-  sellerKey = disclose(joinedSellerKey);
   sellerCommitment = disclose(joinedSellerCommitment);
   status = DealStatus.OPEN;
 }

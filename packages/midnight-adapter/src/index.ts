@@ -47,6 +47,7 @@ import {
   type UnshieldedKeystore,
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
 import { fileURLToPath } from "node:url";
+import { inspect } from "node:util";
 import * as Rx from "rxjs";
 import { WebSocket } from "ws";
 
@@ -205,25 +206,46 @@ export const buildWallet = async (
   return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
 };
 
+const DUST_REGISTRATION_ATTEMPTS = 6;
+const DUST_REGISTRATION_RETRY_MS = 5_000;
+const DUST_AVAILABLE_TIMEOUT_MS = 180_000;
+
+// The wallet wraps the node's RpcError inside an Effect FiberFailure whose inner
+// cause is held under a Symbol, so inspect the whole structure rather than `.cause`.
+const isBalanceCheckOverspend = (error: unknown): boolean =>
+  /Custom error: 138\b/u.test(inspect(error, { depth: 12 }));
+
 const registerNightForDust = async (context: WalletContext): Promise<void> => {
-  const state = await waitForWalletSync(context.wallet);
-  if (state.dust.balance(new Date()) > 0n) return;
-  const coins = state.unshielded.availableCoins.filter(
-    (coin) => coin.meta?.registeredForDustGeneration !== true,
-  );
-  if (coins.length > 0) {
-    const recipe = await context.wallet.registerNightUtxosForDustGeneration(
-      coins,
-      context.unshieldedKeystore.getPublicKey(),
-      (payload) => context.unshieldedKeystore.signData(payload),
+  for (let attempt = 1; ; attempt += 1) {
+    const state = await waitForWalletSync(context.wallet);
+    if (state.dust.balance(new Date()) > 0n) return;
+    const coins = state.unshielded.availableCoins.filter(
+      (coin) => coin.meta?.registeredForDustGeneration !== true,
     );
-    await context.wallet.submitTransaction(
-      await context.wallet.finalizeRecipe(recipe),
-    );
+    if (coins.length === 0) break;
+    try {
+      const recipe = await context.wallet.registerNightUtxosForDustGeneration(
+        coins,
+        context.unshieldedKeystore.getPublicKey(),
+        (payload) => context.unshieldedKeystore.signData(payload),
+      );
+      await context.wallet.submitTransaction(
+        await context.wallet.finalizeRecipe(recipe),
+      );
+      break;
+    } catch (error) {
+      // The registration fee is paid from DUST the new NIGHT UTXO has generated since
+      // creation, so a just-received UTXO can overspend (node error 138) until it ages.
+      if (!isBalanceCheckOverspend(error) || attempt >= DUST_REGISTRATION_ATTEMPTS) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, DUST_REGISTRATION_RETRY_MS));
+    }
   }
   await Rx.firstValueFrom(
     context.wallet.state().pipe(
       Rx.filter((next) => next.isSynced && next.dust.balance(new Date()) > 0n),
+      Rx.timeout({ first: DUST_AVAILABLE_TIMEOUT_MS }),
     ),
   );
 };
@@ -396,6 +418,7 @@ export const deployNegotiation = (
   input: {
     dealId: Uint8Array;
     buyerKey: Uint8Array;
+    sellerKey: Uint8Array;
     buyerCommitment: Uint8Array;
   },
 ): Promise<DeployedNegotiationContract> =>
@@ -403,7 +426,7 @@ export const deployNegotiation = (
     compiledContract,
     privateStateId: NegotiationPrivateStateId,
     initialPrivateState: privateState,
-    args: [input.dealId, input.buyerKey, input.buyerCommitment],
+    args: [input.dealId, input.buyerKey, input.sellerKey, input.buyerCommitment],
   });
 
 export const attachNegotiation = (

@@ -558,7 +558,7 @@ export class IsolatedRuntimeController {
       (message.role === "buyer" &&
         ["WAITING_SELLER", "AUTHORIZED", "CANCELLED"].includes(message.state)) ||
       (message.role === "seller" &&
-        ["OPEN", "SETTLED"].includes(message.state));
+        ["OPEN", "SETTLED", "CANCELLED"].includes(message.state));
     if (!chainMode || !validRole) {
       throw new Error("unexpected chain transaction state");
     }
@@ -588,16 +588,19 @@ export class IsolatedRuntimeController {
       return;
     }
     if (event.state === "CANCELLED") {
+      const cancelledAfterAuthorization = this.#chainAuthorizedSessions.has(
+        event.sessionId,
+      );
+      this.#pendingSettlements.delete(event.sessionId);
       this.#emitParticipantPair({
         sessionId: event.sessionId,
         state: "CANCELLED",
         buyerMessageCode: "NEGOTIATION_CANCELLED",
         sellerMessageCode: "NEGOTIATION_CANCELLED",
         occurredAt: event.occurredAt,
-        replaceKeys: {
-          buyer: "buyer-cancellation",
-          seller: "seller-cancellation",
-        },
+        replaceKeys: cancelledAfterAuthorization
+          ? { buyer: "buyer-settlement", seller: "seller-settlement" }
+          : { buyer: "buyer-cancellation", seller: "seller-cancellation" },
       });
       return;
     }

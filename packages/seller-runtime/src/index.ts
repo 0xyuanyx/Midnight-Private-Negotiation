@@ -58,6 +58,9 @@ let chainContract: DeployedNegotiationContract | undefined;
 let chainContractAddress: string | undefined;
 let pendingContractAddress: string | undefined;
 let sellerChainState: SellerPrivateState | undefined;
+let chainJoinStarted = false;
+let sellerKeySent = false;
+let agreedPrice: string | undefined;
 let peerReady = false;
 let lastSentOffer:
   | {
@@ -158,6 +161,10 @@ type NegotiationPayload =
   | { kind: "contract_ready"; contractAddress: string }
   | { kind: "price_opening"; price: string; priceRandomness: string };
 
+type OutgoingPayload =
+  | NegotiationPayload
+  | { kind: "seller_key"; sellerKey: string };
+
 const isNegotiationPayload = (
   value: unknown,
 ): value is NegotiationPayload => {
@@ -197,7 +204,7 @@ const isNegotiationPayload = (
   );
 };
 
-const relay = (payload: NegotiationPayload): void => {
+const relay = (payload: OutgoingPayload): void => {
   if (
     sessionId === undefined ||
     productCode === undefined ||
@@ -221,7 +228,7 @@ const relay = (payload: NegotiationPayload): void => {
   relayClient.sendPacket(packet);
 };
 
-const sendChainState = (state: "OPEN" | "SETTLED"): void => {
+const sendChainState = (state: "OPEN" | "SETTLED" | "CANCELLED"): void => {
   if (sessionId === undefined || chainContractAddress === undefined) {
     throw new Error("seller chain session is unavailable");
   }
@@ -235,9 +242,30 @@ const sendChainState = (state: "OPEN" | "SETTLED"): void => {
   });
 };
 
+const flushSellerKey = async (): Promise<void> => {
+  if (
+    !chainMode ||
+    sellerKeySent ||
+    sellerChainState === undefined ||
+    sharedKey === undefined ||
+    relayClient === undefined
+  ) {
+    return;
+  }
+  sellerKeySent = true;
+  const contractModule = await import("@midnight-negotiation/negotiation-contract");
+  relay({
+    kind: "seller_key",
+    sellerKey: Buffer.from(
+      contractModule.publicKeyForSecret(sellerChainState.sellerSecretKey),
+    ).toString("hex"),
+  });
+};
+
 const tryJoinOnChain = async (): Promise<void> => {
   if (
     !chainMode ||
+    chainJoinStarted ||
     pendingContractAddress === undefined ||
     sellerChainState === undefined ||
     chainWalletPromise === undefined ||
@@ -246,23 +274,31 @@ const tryJoinOnChain = async (): Promise<void> => {
   ) {
     return;
   }
+  chainJoinStarted = true;
+  const joinSession = sessionId;
+  const contractAddress = pendingContractAddress;
+  const privateState = sellerChainState;
   const [adapter, wallet] = await Promise.all([
     import("@midnight-negotiation/midnight-adapter"),
     chainWalletPromise,
   ]);
-  chainContractAddress = pendingContractAddress;
-  chainProviders = await adapter.configureProviders(
+  const providers = await adapter.configureProviders(
     wallet,
     readChainConfig(),
     role,
-    sessionId,
+    joinSession,
   );
-  chainContract = await adapter.attachNegotiation(
-    chainProviders,
-    chainContractAddress,
-    sellerChainState,
+  const contract = await adapter.attachNegotiation(
+    providers,
+    contractAddress,
+    privateState,
   );
-  await adapter.joinDeal(chainContract);
+  if (sessionId !== joinSession) return;
+  await adapter.joinDeal(contract);
+  if (sessionId !== joinSession) return;
+  chainContractAddress = contractAddress;
+  chainProviders = providers;
+  chainContract = contract;
   sendChainState("OPEN");
 };
 
@@ -290,6 +326,15 @@ const settleOnChain = async (input: {
   sendChainState("SETTLED");
 };
 
+const cancelOnChain = async (): Promise<void> => {
+  if (!chainMode || chainContract === undefined || chainContractAddress === undefined) {
+    return;
+  }
+  const adapter = await import("@midnight-negotiation/midnight-adapter");
+  await adapter.cancelAsSeller(chainContract);
+  sendChainState("CANCELLED");
+};
+
 const acceptPeerKey = (message: RelayPeerKey): void => {
   if (
     sessionId === undefined ||
@@ -301,11 +346,17 @@ const acceptPeerKey = (message: RelayPeerKey): void => {
     throw new Error("seller received a peer key for another room");
   }
   sharedKey = deriveSharedKey(message.publicKey);
+  sellerKeySent = false;
   send({
     protocolVersion: PROTOCOL_VERSION,
     type: "RELAY_CHANNEL_READY",
     role,
     sessionId,
+  });
+  void flushSellerKey().catch(() => {
+    if (sessionId !== undefined) {
+      emit("ERROR", "CHAIN_OPERATION_FAILED", "ROLE_LOCAL");
+    }
   });
 };
 
@@ -337,15 +388,29 @@ const acceptRelayPacket = (packet: RelayPacket): void => {
     return;
   }
   if (payload.kind === "price_opening") {
+    // The contract checks only the limits, not that this is the negotiated price.
+    if (agreedPrice === undefined || payload.price !== agreedPrice) {
+      emit("ERROR", "CHAIN_OPERATION_FAILED", "ROLE_LOCAL");
+      void cancelOnChain().catch(() => {
+        if (sessionId !== undefined) {
+          emit("ERROR", "CHAIN_OPERATION_FAILED", "ROLE_LOCAL");
+        }
+      });
+      return;
+    }
     void settleOnChain(payload).catch(() => {
       if (sessionId !== undefined) {
         emit("ERROR", "CHAIN_OPERATION_FAILED", "ROLE_LOCAL");
       }
+      return cancelOnChain().catch(() => undefined);
     });
     return;
   }
   if (sellerMinPrice === undefined) {
     throw new Error("seller received negotiation traffic before setting a limit");
+  }
+  if (agreedPrice !== undefined) {
+    throw new Error("seller received negotiation traffic after agreeing on a price");
   }
   if (payload.kind === "accept") {
     if (
@@ -354,6 +419,7 @@ const acceptRelayPacket = (packet: RelayPacket): void => {
     ) {
       throw new Error("Buyer accepted an unknown Seller offer");
     }
+    agreedPrice = payload.price;
     return;
   }
   if (payload.kind === "decline") {
@@ -371,6 +437,7 @@ const executeCandidate = (
   candidate: NegotiationCandidate,
 ): void => {
   if (candidate.action === "accept") {
+    agreedPrice = candidate.price;
     relay({
       kind: "accept",
       round: context.round,
@@ -447,6 +514,8 @@ if (chainMode) {
     });
     throw error;
   });
+  // Later awaits still see the rejection; this only stops Node from exiting on it.
+  chainWalletPromise.catch(() => undefined);
 }
 
 process.on("message", (raw: unknown) => {
@@ -468,6 +537,9 @@ process.on("message", (raw: unknown) => {
         chainContractAddress = undefined;
         pendingContractAddress = undefined;
         sellerChainState = undefined;
+        chainJoinStarted = false;
+        sellerKeySent = false;
+        agreedPrice = undefined;
         const keyPair = generateKeyPairSync("x25519");
         privateKey = keyPair.privateKey;
         emit("ROOM_JOINED", "ROOM_JOINED", "ROLE_LOCAL");
@@ -511,6 +583,9 @@ process.on("message", (raw: unknown) => {
         if (sessionId !== command.sessionId || productCode === undefined) {
           throw new Error("seller room is not configured");
         }
+        if (sellerChainState !== undefined) {
+          throw new Error("seller limit is already locked");
+        }
         sellerMinPrice = BigInt(command.limitKrw);
         const sellerLimitRandomness = new Uint8Array(randomBytes(32));
         sellerChainState = {
@@ -519,6 +594,11 @@ process.on("message", (raw: unknown) => {
           sellerLimitRandomness,
           sellerSecretKey: new Uint8Array(randomBytes(32)),
         };
+        void flushSellerKey().catch(() => {
+          if (sessionId !== undefined) {
+            emit("ERROR", "CHAIN_OPERATION_FAILED", "ROLE_LOCAL");
+          }
+        });
         createHash("sha256")
           .update(command.limitKrw)
           .update(sellerLimitRandomness)
@@ -578,6 +658,9 @@ process.on("message", (raw: unknown) => {
         chainContractAddress = undefined;
         pendingContractAddress = undefined;
         sellerChainState = undefined;
+        chainJoinStarted = false;
+        sellerKeySent = false;
+        agreedPrice = undefined;
         productCode = undefined;
         sessionId = undefined;
         if (chainWalletPromise === undefined) {
@@ -585,6 +668,7 @@ process.on("message", (raw: unknown) => {
         } else {
           void chainWalletPromise
             .then(({ wallet }) => wallet.stop())
+            .catch(() => undefined)
             .finally(() => process.disconnect());
         }
         break;
