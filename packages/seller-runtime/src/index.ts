@@ -310,6 +310,8 @@ const tryJoinOnChain = async (): Promise<void> => {
     joinSession,
     { dataDir: storage.dataDir, password: storage.privateStatePassword },
   );
+  // The deal ID pins this session to one deal; cleanup refuses anything else.
+  const joinedDeal = await adapter.queryPublicState(readChainConfig(), contractAddress);
   // Recorded before joining so a crash still leaves a way back to the store.
   const record: SessionRecord = {
     role,
@@ -317,6 +319,7 @@ const tryJoinOnChain = async (): Promise<void> => {
     network: adapter.LOCAL_NETWORK_ID,
     ...providers.storage,
     contractAddress,
+    dealId: Buffer.from(joinedDeal.dealId).toString("hex"),
     phase: "ACTIVE",
     updatedAt: new Date().toISOString(),
   };

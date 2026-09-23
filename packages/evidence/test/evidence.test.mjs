@@ -374,3 +374,151 @@ test("level private state opened with the wrong password cannot be read", async 
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+// Regression: evidence of another deal B, encrypted with the same key and
+// valid on chain, must not unlock the cleanup of deal A.
+const CONTRACT_B = `mn_contract_undeployed1${"b".repeat(48)}`;
+const DEAL_B = "22".repeat(32);
+const COMMITMENT_B = hex(priceCommitment(hexToBytes(DEAL_B), PRICE, hexToBytes(RANDOMNESS)));
+const twoDeals = (status) => async (address) => {
+  if (address === CONTRACT) {
+    return { dealId: hexToBytes(DEAL_ID), priceCommitment: hexToBytes(COMMITMENT), status };
+  }
+  if (address === CONTRACT_B) {
+    return { dealId: hexToBytes(DEAL_B), priceCommitment: hexToBytes(COMMITMENT_B), status };
+  }
+  throw new Error("contract is not indexed");
+};
+
+const plantDealBEvidenceAtDealA = async (dataDir, key) => {
+  const pathB = await saveEvidence({
+    dataDir,
+    evidence: sampleEvidence({ contractAddress: CONTRACT_B, dealId: DEAL_B, priceCommitment: COMMITMENT_B }),
+    key,
+    keyStore: "file",
+  });
+  await writeFile(evidencePath(dataDir, "buyer", CONTRACT), await readFile(pathB));
+};
+
+test("another deal's valid evidence at this path does not erase this session", async () => {
+  const dataDir = await tempDir();
+  try {
+    const key = randomBytes(32);
+    await plantDealBEvidenceAtDealA(dataDir, key);
+    // B's evidence alone is valid on chain.
+    assert.deepEqual(
+      await verifyEvidence({
+        evidence: await loadEvidence(evidencePath(dataDir, "buyer", CONTRACT), key),
+        network: "undeployed",
+        readDealState: twoDeals(Negotiation.DealStatus.SETTLED),
+      }),
+      { ok: true },
+    );
+
+    // A has no opening of its own: nothing may be erased.
+    const empty = fakeStore(undefined);
+    const kept = await finalizeSession({
+      record: sessionRecord(dataDir),
+      dataDir,
+      network: "undeployed",
+      readDealState: twoDeals(Negotiation.DealStatus.SETTLED),
+      openStore: () => empty,
+      evidenceKey: key,
+      keyStore: "file",
+    });
+    assert.deepEqual(kept, { kind: "KEPT", reason: "NO_OPENING" });
+    assert.equal(empty.erased, 0);
+
+    // With A's own opening, A's evidence replaces B's before cleanup.
+    const own = fakeStore({ price: PRICE, priceRandomness: hexToBytes(RANDOMNESS) });
+    const saved = await finalizeSession({
+      record: sessionRecord(dataDir),
+      dataDir,
+      network: "undeployed",
+      readDealState: twoDeals(Negotiation.DealStatus.SETTLED),
+      openStore: () => own,
+      evidenceKey: key,
+      keyStore: "file",
+    });
+    assert.equal(saved.kind, "SETTLED_EVIDENCE_SAVED");
+    assert.equal(own.erased, 1);
+    const restored = await loadEvidence(saved.path, key);
+    assert.equal(restored.contractAddress, CONTRACT);
+    assert.equal(restored.dealId, DEAL_ID);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("evidence for another role or network does not erase this session", async () => {
+  const dataDir = await tempDir();
+  try {
+    const key = randomBytes(32);
+    for (const overrides of [{ role: "seller" }, { network: "testnet" }]) {
+      const evidence = encryptEvidence(sampleEvidence(overrides), key, "file");
+      await mkdir(join(dataDir, "evidence"), { recursive: true });
+      await writeFile(evidencePath(dataDir, "buyer", CONTRACT), JSON.stringify(evidence));
+      const store = fakeStore(undefined);
+      const outcome = await finalizeSession({
+        record: sessionRecord(dataDir),
+        dataDir,
+        network: "undeployed",
+        readDealState: chain(Negotiation.DealStatus.SETTLED),
+        openStore: () => store,
+        evidenceKey: key,
+        keyStore: "file",
+      });
+      assert.deepEqual(outcome, { kind: "KEPT", reason: "NO_OPENING" });
+      assert.equal(store.erased, 0);
+    }
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("a cancelled deal is erased only when the session identifies that exact deal", async () => {
+  const dataDir = await tempDir();
+  try {
+    for (const [record, network] of [
+      [sessionRecord(dataDir, { dealId: DEAL_B }), "undeployed"],
+      [sessionRecord(dataDir, { network: "testnet" }), "undeployed"],
+      [sessionRecord(dataDir), "testnet"],
+      [sessionRecord(dataDir, { dealId: undefined }), "undeployed"],
+    ]) {
+      const store = fakeStore(undefined);
+      const outcome = await finalizeSession({
+        record,
+        dataDir,
+        network,
+        readDealState: chain(Negotiation.DealStatus.CANCELLED),
+        openStore: () => store,
+        evidenceKey: randomBytes(32),
+        keyStore: "file",
+      });
+      assert.deepEqual(outcome, { kind: "KEPT", reason: "IDENTITY_MISMATCH" });
+      assert.equal(store.erased, 0);
+    }
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("a settled deal with a mismatched deal ID keeps everything", async () => {
+  const dataDir = await tempDir();
+  try {
+    const store = fakeStore({ price: PRICE, priceRandomness: hexToBytes(RANDOMNESS) });
+    const outcome = await finalizeSession({
+      record: sessionRecord(dataDir, { dealId: DEAL_B }),
+      dataDir,
+      network: "undeployed",
+      readDealState: chain(Negotiation.DealStatus.SETTLED),
+      openStore: () => store,
+      evidenceKey: randomBytes(32),
+      keyStore: "file",
+    });
+    assert.deepEqual(outcome, { kind: "KEPT", reason: "IDENTITY_MISMATCH" });
+    assert.equal(store.erased, 0);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

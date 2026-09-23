@@ -151,8 +151,22 @@ export type FinalizeOutcome =
         | "CHAIN_UNAVAILABLE"
         | "NOT_FINAL"
         | "NO_OPENING"
+        | "IDENTITY_MISMATCH"
         | "EVIDENCE_REJECTED";
     };
+
+// Evidence may only stand in for this session if it names the same party,
+// network, contract and deal. Otherwise another deal's valid evidence, placed
+// at this path, could unlock this session's cleanup.
+const evidenceBelongsTo = (
+  evidence: SettlementEvidence,
+  record: SessionRecord,
+  network: string,
+): boolean =>
+  evidence.role === record.role &&
+  evidence.network === network &&
+  evidence.contractAddress === record.contractAddress &&
+  evidence.dealId === record.dealId;
 
 export const finalizeSession = async (input: {
   record: SessionRecord;
@@ -168,6 +182,11 @@ export const finalizeSession = async (input: {
   if (record.phase === "CLEANED") return { kind: "ALREADY_CLEANED" };
   if (record.contractAddress === undefined) return { kind: "KEPT", reason: "NO_CONTRACT" };
   const contractAddress = record.contractAddress;
+  // Nothing is erased for a session that cannot prove which deal it is.
+  if (record.dealId === undefined || record.network !== input.network) {
+    return { kind: "KEPT", reason: "IDENTITY_MISMATCH" };
+  }
+  const dealId = record.dealId;
 
   // The chain decides the outcome. A caller's claim is never enough to treat
   // an open or authorized deal as final.
@@ -177,6 +196,7 @@ export const finalizeSession = async (input: {
   } catch {
     return { kind: "KEPT", reason: "CHAIN_UNAVAILABLE" };
   }
+  if (toHex(state.dealId) !== dealId) return { kind: "KEPT", reason: "IDENTITY_MISMATCH" };
   const store = input.openStore(record);
   const markCleaned = async () => {
     await store.erase();
@@ -202,7 +222,9 @@ export const finalizeSession = async (input: {
   let savedPath: string | undefined;
   try {
     const existing = await loadEvidence(path, input.evidenceKey);
-    if ((await check(existing)).ok) savedPath = path;
+    if (evidenceBelongsTo(existing, record, input.network) && (await check(existing)).ok) {
+      savedPath = path;
+    }
   } catch {
     // Missing or unreadable evidence is rebuilt from the private state below.
   }
@@ -210,7 +232,6 @@ export const finalizeSession = async (input: {
   if (savedPath === undefined) {
     const opening = await store.readOpening();
     if (opening === undefined) return { kind: "KEPT", reason: "NO_OPENING" };
-    const dealId = record.dealId ?? toHex(state.dealId);
     const evidence: SettlementEvidence = {
       role: record.role,
       network: input.network,
@@ -231,8 +252,10 @@ export const finalizeSession = async (input: {
       key: input.evidenceKey,
       keyStore: input.keyStore,
     });
-    // Only a decrypted copy that still matches the chain unlocks the cleanup.
-    if (!(await check(await loadEvidence(savedPath, input.evidenceKey))).ok) {
+    // Only a decrypted copy of this session's evidence that still matches the
+    // chain unlocks the cleanup.
+    const reread = await loadEvidence(savedPath, input.evidenceKey);
+    if (!evidenceBelongsTo(reread, record, input.network) || !(await check(reread)).ok) {
       return { kind: "KEPT", reason: "EVIDENCE_REJECTED" };
     }
   }
