@@ -144,7 +144,7 @@ process.on("message", (raw: unknown) => {
       case "SET_LIMIT":
       case "PEER_READY":
       case "CHAIN_FUNDED":
-      case "VERIFY_SETTLEMENT":
+      case "FINALIZE_SESSION":
         throw new Error("party command reached observer runtime");
     }
   } catch {

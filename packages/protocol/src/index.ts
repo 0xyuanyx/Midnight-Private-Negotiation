@@ -102,11 +102,12 @@ export type PublishPublicStateCommand = {
   occurredAt: string;
 };
 
-// Asks a party runtime to reopen the public price commitment with its own
-// stored opening after the Observer sees SETTLED. The amount never travels here.
-export type VerifySettlementCommand = {
+// Asks a party runtime to finish its session after the Observer sees SETTLED
+// or CANCELLED. The runtime reads the chain itself before saving evidence or
+// erasing anything, and the amount never travels here.
+export type FinalizeSessionCommand = {
   protocolVersion: typeof PROTOCOL_VERSION;
-  type: "VERIFY_SETTLEMENT";
+  type: "FINALIZE_SESSION";
   requestId: string;
   target: PartyRole;
   sessionId: string;
@@ -127,7 +128,7 @@ export type RuntimeCommand =
   | ChainFundedCommand
   | ObserveChainStateCommand
   | PublishPublicStateCommand
-  | VerifySettlementCommand
+  | FinalizeSessionCommand
   | StartRuntimeCommand
   | ShutdownRuntimeCommand;
 
@@ -413,7 +414,7 @@ export const parseRuntimeCommand = (value: unknown, expectedRole?: Role): Runtim
       }
       command = value as PublishPublicStateCommand;
       break;
-    case "VERIFY_SETTLEMENT":
+    case "FINALIZE_SESSION":
       if (
         !hasExactKeys(value, [
           "protocolVersion",
@@ -426,9 +427,9 @@ export const parseRuntimeCommand = (value: unknown, expectedRole?: Role): Runtim
         !isPartyRole(value.target) ||
         !isIdentifier(value.sessionId)
       ) {
-        throw new Error("invalid settlement verification command");
+        throw new Error("invalid session finalize command");
       }
-      command = value as VerifySettlementCommand;
+      command = value as FinalizeSessionCommand;
       break;
     case "START_RUNTIME":
     case "SHUTDOWN_RUNTIME":

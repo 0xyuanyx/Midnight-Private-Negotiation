@@ -11,6 +11,9 @@
       "path": "./packages/negotiation-contract"
     },
     {
+      "path": "./packages/evidence"
+    },
+    {
       "path": "./packages/midnight-adapter"
     },
     {

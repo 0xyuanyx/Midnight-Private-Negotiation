@@ -19,6 +19,7 @@ logs
 logs/*.log
 midnight-level-db
 .demo-wallets/
+.demo-chain.json
 .demo-private-state/
 coverage
 

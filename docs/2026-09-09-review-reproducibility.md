@@ -310,3 +310,28 @@ midnight-fact-check fast-check로 README와 제출 양식 초안에서 Midnight�
 | 공개 데이터 검사 | Indexer GraphQL에서 두 시연의 계약 트랜잭션 7건(배포 2, 호출 5)의 `raw`와 계약 상태를 모두 받아 합의 가격 100,000,000, 한도 110,000,000·95,000,000·90,000,000의 little-endian·big-endian 16진 인코딩을 검색했다. 모두 없었다. 10진 문자열 일치는 모든 트랜잭션의 같은 위치(회로 verifier key·연산 인코딩)에서 반복되는 16진 숫자열뿐이었고, 가격이 정해지기 전인 배포 트랜잭션에도 똑같이 있었다. |
 
 한계: mock 협상 provider만 사용했다. 실제 OpenAI 모드는 이번에 다시 실행하지 않았다. 증명 서버는 로컬 컨테이너이며, 그 요청에는 비공개 witness 값이 들어간다. 계약 주소·호출한 회로 이름·상태 변화 시점은 공개된다. 발표용 한 화면에서는 Buyer·Seller 패널이 합의 가격을 표시하고 이 값은 로컬 Controller를 거친다. 기존 제출 영상은 이 전환 이전 버전이다.
+
+## 2026-09-23 단계 C 최소 구현 — 합의 증빙 보관·복원과 중간 기록 정리
+
+### 구현
+
+- 새 패키지 `packages/evidence`: 키 보관소, 증빙 암호화·원자적 저장·재대조, 비밀값 없는 세션 기록, 체인 상태 기반 마무리·복구.
+- 키: macOS 키체인(서비스 `midnight-private-negotiation`)에 역할·용도별(`buyer-evidence`, `buyer-private-state`, `seller-…`) 32바이트 무작위 값. 새 키는 `security -i`의 표준 입력으로 등록해 프로세스 인자에 노출하지 않는다. 키체인을 쓸 수 없으면 오류로 멈추고, 권한 600 키 파일은 `NEGOTIATION_KEY_STORE=file`을 명시할 때만 쓴다.
+- private state 저장소 비밀번호: 기존의 공개키(`accountId`) 파생 값을 버리고 키 보관소 비밀에서 만든다. 역할별 DB `~/.midnight-private-negotiation/private-state/{buyer,seller}`로 옮겼다. 저장소 루트의 이전 `midnight-level-db`는 열거나 지우지 않는다.
+- 증빙: 합의 가격, 가격 난수, 가격 commitment, 계약 주소, 거래 ID, 네트워크, 계약 버전. AES-256-GCM, 헤더를 AAD로 묶는다. 한도·지갑 seed·비밀키는 형식상 넣을 수 없다.
+- 마무리 순서: 런타임이 체인을 직접 읽음 → `SETTLED`면 증빙 저장(임시 파일·fsync·rename) → 다시 읽어 복호화 → 네트워크·계약 버전·거래 ID·상태·commitment 대조 → 세션 기록 `EVIDENCE_SAVED` → private state와 서명 키 삭제·메모리 참조 해제 → `CLEANED`. `CANCELLED`는 증빙 없이 정리. `OPEN`·`AUTHORIZED`·Indexer 불통이면 아무것도 지우지 않는다.
+- 런타임 시작 시 끝나지 않은 세션을 같은 규칙으로 마무리한다. `npm run evidence -- verify|status|recover` CLI와 `demo:local --keep-chain`을 추가했다.
+
+### 검증
+
+| 항목 | 결과 |
+|---|---|
+| `npm run typecheck` | 통과 |
+| 루트 테스트 | 62/62 (증빙 12개 추가: 왕복·다른 키·변조·헤더 변조, 한도·비밀키 필드 거부, 체인 대조 7가지 사유, 정상 마무리, 미확정 유지 3가지, 불일치 시 저장·삭제 없음, 결렬 정리, 쓰기 도중 중단 후 복구, 저장 후 정리 전 중단 복구, 파일 키 명시 선택·권한, 키체인 생성·재조회, 다른 비밀번호로 private state 읽기 실패) |
+| 웹 테스트 | 8/8 |
+| 로컬 체인 성공 시연 (`--keep-chain`, 19:53~19:55) | Buyer·Seller 모두 `가격 커밋 확인 → 합의 증빙 보관 → 중간 기록과 세션 키 정리`. 세션 기록 두 건 `CLEANED`, 저장소에서 가격 opening을 다시 읽으면 없음 |
+| 앱 종료 후 `npm run evidence -- verify` | 체인만 남긴 상태에서 두 증빙 복호화 성공, 네트워크·계약 버전·거래 ID·`SETTLED`·가격 commitment 모두 일치 |
+| 변조·다른 키 | 증빙 복사본의 암호문 1바이트 변경 → 해당 파일만 복호화 실패. 다른 무작위 키(파일 키 저장소) → 두 파일 모두 복호화 실패 |
+| 미확정 거래 | 같은 체인을 재사용한 두 번째 시연에서 체인 `AUTHORIZED` 직후 두 런타임을 강제 종료. 체인은 `AUTHORIZED`로 남았고 `recover`는 두 세션 모두 `KEPT (NOT_FINAL)`. 증빙을 만들지 않았고 Buyer 저장소의 가격 opening이 유지됐다 |
+
+한계: "증빙 쓰기 도중 종료 후 복구"는 단위 테스트로만 확인했고 실제 체인에서 쓰기 도중 종료를 재현하지는 않았다. LevelDB 삭제는 논리 삭제라 디스크 잔여 데이터, 백업, OS 스왑까지 지운다고 보장하지 않는다. 상대방·외부 AI의 사본은 지울 수 없다. 체인을 내리면(`midnight:down`) 남은 미확정 세션은 계속 `CHAIN_UNAVAILABLE`로 유지된다.

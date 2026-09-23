@@ -9,6 +9,7 @@
     "@midnight-negotiation/midnight-adapter": "2.0.0",
     "@midnight-negotiation/negotiation-contract": "2.0.0",
     "@midnight-negotiation/protocol": "2.0.0",
-    "@midnight-negotiation/room-relay": "2.0.0"
+    "@midnight-negotiation/room-relay": "2.0.0",
+    "@midnight-negotiation/evidence": "2.0.0"
   }
 }

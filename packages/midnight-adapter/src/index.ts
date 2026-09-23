@@ -46,6 +46,20 @@ import {
   UnshieldedWallet,
   type UnshieldedKeystore,
 } from "@midnight-ntwrk/wallet-sdk-unshielded-wallet";
+import {
+  finalizeSession,
+  privateStatePassword,
+  recoverSessions,
+  resolveDataDir,
+  selectKeyStore,
+  writeSessionRecord,
+  type FinalizeOutcome,
+  type KeyStore,
+  type PublicDealState,
+  type SessionRecord,
+  type SessionStore,
+} from "@midnight-negotiation/evidence";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspect } from "node:util";
 import * as Rx from "rxjs";
@@ -97,7 +111,8 @@ const compiledContract = CompiledContract.make(
   CompiledContract.withCompiledFileAssets(zkConfigPath),
 );
 
-export const useUndeployedNetwork = (): void => setNetworkId("undeployed");
+export const LOCAL_NETWORK_ID = "undeployed";
+export const useUndeployedNetwork = (): void => setNetworkId(LOCAL_NETWORK_ID);
 
 const deriveKeysFromSeed = (seed: string) => {
   if (!/^[0-9a-f]{64}$/u.test(seed)) {
@@ -379,25 +394,42 @@ const createWalletProvider = async (
   };
 };
 
+export type SessionStorage = {
+  privateStateDb: string;
+  storeName: string;
+  accountId: string;
+};
+
+const openPrivateStateProvider = (storage: SessionStorage, password: string) =>
+  levelPrivateStateProvider<typeof NegotiationPrivateStateId>({
+    midnightDbName: storage.privateStateDb,
+    privateStateStoreName: storage.storeName,
+    accountId: storage.accountId,
+    privateStoragePasswordProvider: () => password,
+  });
+
+// The storage password comes from the role's key store, never from public key
+// material. Each role gets its own database so the two runtimes never contend
+// for the same LevelDB lock.
 export const configureProviders = async (
   context: WalletContext,
   config: MidnightLocalConfig,
   role: RuntimeRole,
   sessionId: string,
-): Promise<NegotiationProviders> => {
+  storageInput: { dataDir: string; password: string },
+): Promise<NegotiationProviders & { storage: SessionStorage }> => {
   const walletProvider = await createWalletProvider(context);
   const zkConfigProvider =
     new NodeZkConfigProvider<NegotiationCircuits>(zkConfigPath);
   const accountId = walletProvider.getCoinPublicKey();
-  const storagePassword = `${Buffer.from(accountId, "hex").toString("base64")}!`;
+  const storage: SessionStorage = {
+    privateStateDb: join(storageInput.dataDir, "private-state", role),
+    storeName: `negotiation-${role}-${sessionId}-${accountId.slice(0, 16)}`,
+    accountId,
+  };
   return {
-    privateStateProvider: levelPrivateStateProvider<
-      typeof NegotiationPrivateStateId
-    >({
-      privateStateStoreName: `negotiation-${role}-${sessionId}-${accountId.slice(0, 16)}`,
-      accountId,
-      privateStoragePasswordProvider: () => storagePassword,
-    }),
+    storage,
+    privateStateProvider: openPrivateStateProvider(storage, storageInput.password),
     publicDataProvider: indexerPublicDataProvider(
       config.indexer,
       config.indexerWS,
@@ -498,3 +530,101 @@ export const queryPublicState = async (
   if (state === null) throw new Error("contract is not indexed");
   return Negotiation.ledger(state.data);
 };
+
+export const readDealState =
+  (config: Pick<MidnightLocalConfig, "indexer" | "indexerWS">) =>
+  async (contractAddress: string): Promise<PublicDealState> => {
+    const ledgerState = await queryPublicState(config, contractAddress);
+    return {
+      dealId: ledgerState.dealId,
+      priceCommitment: ledgerState.priceCommitment,
+      status: Number(ledgerState.status),
+    };
+  };
+
+// Reopens a session's private state from its record, for finishing or
+// recovering that session after the live providers are gone.
+export const openSessionStore = (
+  record: SessionRecord,
+  password: string,
+): SessionStore => {
+  if (record.contractAddress === undefined) {
+    throw new Error("session has no contract to open");
+  }
+  const contractAddress = record.contractAddress;
+  const provider = openPrivateStateProvider(record, password);
+  provider.setContractAddress(contractAddress);
+  return {
+    async readOpening() {
+      const state = await provider.get(NegotiationPrivateStateId);
+      if (state === null) return undefined;
+      if (state.role === "buyer") {
+        return state.agreedPrice > 0n
+          ? { price: state.agreedPrice, priceRandomness: state.priceRandomness }
+          : undefined;
+      }
+      return state.priceOpening === undefined
+        ? undefined
+        : {
+            price: state.priceOpening.agreedPrice,
+            priceRandomness: state.priceOpening.priceRandomness,
+          };
+    },
+    async erase() {
+      await provider.remove(NegotiationPrivateStateId);
+      await provider.removeSigningKey(contractAddress);
+    },
+  };
+};
+
+export type RoleStorage = {
+  role: RuntimeRole;
+  dataDir: string;
+  keyStore: KeyStore;
+  evidenceKey: Buffer;
+  privateStatePassword: string;
+};
+
+// Loads the role's keys from the selected key store. An unavailable key store
+// stops the runtime instead of falling back to a weaker one.
+export const prepareRoleStorage = async (role: RuntimeRole): Promise<RoleStorage> => {
+  const dataDir = resolveDataDir();
+  const keyStore = selectKeyStore({ dataDir });
+  return {
+    role,
+    dataDir,
+    keyStore,
+    evidenceKey: await keyStore.getOrCreateKey(role, "evidence"),
+    privateStatePassword: privateStatePassword(
+      await keyStore.getOrCreateKey(role, "private-state"),
+    ),
+  };
+};
+
+export const saveSessionRecord = (storage: RoleStorage, record: SessionRecord) =>
+  writeSessionRecord(storage.dataDir, record);
+
+const finalizeInput = (
+  storage: RoleStorage,
+  config: Pick<MidnightLocalConfig, "indexer" | "indexerWS">,
+) => ({
+  dataDir: storage.dataDir,
+  network: LOCAL_NETWORK_ID,
+  readDealState: readDealState(config),
+  openStore: (record: SessionRecord) =>
+    openSessionStore(record, storage.privateStatePassword),
+  evidenceKey: storage.evidenceKey,
+  keyStore: storage.keyStore.mode,
+});
+
+export const finalizeRoleSession = (
+  storage: RoleStorage,
+  config: Pick<MidnightLocalConfig, "indexer" | "indexerWS">,
+  record: SessionRecord,
+): Promise<FinalizeOutcome> =>
+  finalizeSession({ ...finalizeInput(storage, config), record });
+
+export const recoverRoleSessions = (
+  storage: RoleStorage,
+  config: Pick<MidnightLocalConfig, "indexer" | "indexerWS">,
+) => recoverSessions({ ...finalizeInput(storage, config), role: storage.role });

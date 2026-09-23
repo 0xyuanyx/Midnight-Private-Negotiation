@@ -598,6 +598,7 @@ export class IsolatedRuntimeController {
         event.sessionId,
       );
       this.#pendingSettlements.delete(event.sessionId);
+      this.#requestSessionFinalize(event.sessionId);
       this.#emitParticipantPair({
         sessionId: event.sessionId,
         state: "CANCELLED",
@@ -643,15 +644,21 @@ export class IsolatedRuntimeController {
         occurredAt: event.occurredAt,
       });
       this.#pendingSettlements.delete(event.sessionId);
-      for (const target of ["buyer", "seller"] as const) {
-        this.#send({
-          protocolVersion: PROTOCOL_VERSION,
-          type: "VERIFY_SETTLEMENT",
-          requestId: createRequestId(),
-          target,
-          sessionId: event.sessionId,
-        });
-      }
+      this.#requestSessionFinalize(event.sessionId);
+    }
+  }
+
+  // Each party runtime checks the chain itself, stores its evidence, and only
+  // then erases its private state and session keys.
+  #requestSessionFinalize(sessionId: string): void {
+    for (const target of ["buyer", "seller"] as const) {
+      this.#send({
+        protocolVersion: PROTOCOL_VERSION,
+        type: "FINALIZE_SESSION",
+        requestId: createRequestId(),
+        target,
+        sessionId,
+      });
     }
   }
 

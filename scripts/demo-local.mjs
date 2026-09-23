@@ -3,11 +3,19 @@
 // the demo can run next to other local Midnight projects. Ctrl+C stops everything
 // this script started, including only this project's containers.
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 
 const root = new URL("..", import.meta.url).pathname;
 const useOpenAI = process.argv.includes("--openai");
+// --keep-chain leaves the local chain running after Ctrl+C, so settlement
+// evidence can be checked against the same chain after the app has exited.
+const keepChain = process.argv.includes("--keep-chain");
+const chainFile = `${root}.demo-chain.json`;
+const chainRunning = () =>
+  spawnSync("docker", ["ps", "-q", "--filter", "name=^negotiation-v2-node$", "--filter", "status=running"], {
+    encoding: "utf8",
+  }).stdout.trim().length > 0;
 const children = [];
 let stopping = false;
 
@@ -80,7 +88,12 @@ async function shutdown(code = 0) {
       process.kill(-child.pid, "SIGTERM");
     } catch {}
   }
-  if (composeEnv !== undefined) compose(["down"], composeEnv);
+  if (composeEnv !== undefined && keepChain) {
+    log("로컬 체인은 계속 실행합니다. `npm run evidence -- verify`로 보관한 합의 증빙을 확인하고, 끝나면 `npm run midnight:down`으로 내리세요.");
+  } else if (composeEnv !== undefined) {
+    compose(["down"], composeEnv);
+    rmSync(chainFile, { force: true });
+  }
   process.exit(code);
 }
 // SIGHUP arrives when the terminal window is closed; the detached children would
@@ -115,11 +128,17 @@ try {
   }
 
   const taken = new Set();
+  // Reuse a chain left running by --keep-chain; new ports would recreate it.
+  const kept = existsSync(chainFile) && chainRunning() ? JSON.parse(readFileSync(chainFile, "utf8")) : undefined;
+  if (kept !== undefined) {
+    for (const port of Object.values(kept)) taken.add(port);
+    log("이전에 유지한 로컬 체인을 그대로 사용합니다.");
+  }
   const ports = {
-    node: await freePort(9944, taken),
-    indexer: await freePort(8088, taken),
-    buyerProof: await freePort(6301, taken),
-    sellerProof: await freePort(6302, taken),
+    node: kept?.node ?? (await freePort(9944, taken)),
+    indexer: kept?.indexer ?? (await freePort(8088, taken)),
+    buyerProof: kept?.buyerProof ?? (await freePort(6301, taken)),
+    sellerProof: kept?.sellerProof ?? (await freePort(6302, taken)),
     controller: await freePort(8787, taken),
     web: await freePort(3001, taken),
   };
@@ -154,6 +173,10 @@ try {
   if (compose(["up", "-d", "--wait"], composeEnv).status !== 0) {
     await fail("로컬 체인을 시작하지 못했습니다. 위 Docker 로그를 확인하세요.");
   }
+  writeFileSync(
+    chainFile,
+    `${JSON.stringify({ node: ports.node, indexer: ports.indexer, buyerProof: ports.buyerProof, sellerProof: ports.sellerProof })}\n`,
+  );
 
   let controllerReady = false;
   start("controller", "npm", ["run", useOpenAI ? "demo:midnight" : "demo:midnight:mock"], {
@@ -179,7 +202,8 @@ try {
   3. 결렬: 화면 오른쪽 위 '초기화' 뒤 Buyer 90000000, Seller 95000000
   - 협상 후보는 ${useOpenAI ? "OpenAI" : "API 키가 필요 없는 mock 생성기"}로 만듭니다.
   - 첫 시연은 지갑 자금 준비·DUST 등록·증명 생성 때문에 결과까지 약 7분, 이후 시연은 2~4분 걸립니다.
-  - 끝내려면 Ctrl+C. 이 데모가 띄운 컨테이너만 내립니다.
+  - 끝내려면 Ctrl+C. ${keepChain ? "로컬 체인은 남겨 두고 앱만 종료합니다." : "이 데모가 띄운 컨테이너만 내립니다."}
+  - 합의 증빙은 역할별로 암호화해 보관합니다. 확인: npm run evidence -- verify
 `);
 } catch (error) {
   await fail(error instanceof Error ? error.message : String(error));

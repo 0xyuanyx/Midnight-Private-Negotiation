@@ -142,12 +142,12 @@ test("keeps every amount out of public settlement events and commands", () => {
 test("routes settlement verification only to party runtimes without an amount", () => {
   const command = {
     protocolVersion: PROTOCOL_VERSION,
-    type: "VERIFY_SETTLEMENT",
+    type: "FINALIZE_SESSION",
     requestId: "request-verify",
     target: "seller",
     sessionId: "session-1",
   };
-  assert.equal(parseRuntimeCommand(command, "seller").type, "VERIFY_SETTLEMENT");
+  assert.equal(parseRuntimeCommand(command, "seller").type, "FINALIZE_SESSION");
   assert.throws(() => parseRuntimeCommand({ ...command, target: "observer" }));
   assert.throws(() => parseRuntimeCommand({ ...command, agreedAmount: "100000" }));
   assert.throws(() => parseRuntimeCommand(command, "buyer"));

@@ -28,10 +28,12 @@ import {
   type NegotiationCandidate,
   type PublicNegotiationContext,
 } from "@midnight-negotiation/agent-core";
+import type { SessionRecord } from "@midnight-negotiation/evidence";
 import type {
   DeployedNegotiationContract,
   MidnightLocalConfig,
   NegotiationProviders,
+  RoleStorage,
   WalletContext,
 } from "@midnight-negotiation/midnight-adapter";
 import type { SellerPrivateState } from "@midnight-negotiation/negotiation-contract";
@@ -61,7 +63,8 @@ let sellerChainState: SellerPrivateState | undefined;
 let chainJoinStarted = false;
 let sellerKeySent = false;
 let agreedPrice: string | undefined;
-let settledOpening: { price: bigint; priceRandomness: Uint8Array } | undefined;
+let roleStorage: RoleStorage | undefined;
+let sessionRecord: SessionRecord | undefined;
 let peerReady = false;
 let lastSentOffer:
   | {
@@ -94,6 +97,21 @@ const readChainConfig = (): MidnightLocalConfig => {
 const initializeChainWallet = async (): Promise<WalletContext> => {
   const adapter = await import("@midnight-negotiation/midnight-adapter");
   adapter.useUndeployedNetwork();
+  // Key store first: without it no private state or evidence can be protected.
+  roleStorage = await adapter.prepareRoleStorage(role);
+  // Finish sessions an earlier run left open before this run touches storage.
+  await adapter
+    .recoverRoleSessions(roleStorage, readChainConfig())
+    .then((results) => {
+      if (results.length > 0) {
+        console.error(
+          `[seller] recovered sessions: ${results
+            .map(({ outcome }) => ("reason" in outcome ? `${outcome.kind}:${outcome.reason}` : outcome.kind))
+            .join(", ")}`,
+        );
+      }
+    })
+    .catch(() => console.error("[seller] session recovery failed; records kept"));
   const seed = randomBytes(32).toString("hex");
   send({
     protocolVersion: PROTOCOL_VERSION,
@@ -283,12 +301,26 @@ const tryJoinOnChain = async (): Promise<void> => {
     import("@midnight-negotiation/midnight-adapter"),
     chainWalletPromise,
   ]);
+  if (roleStorage === undefined) throw new Error("seller key store is unavailable");
+  const storage = roleStorage;
   const providers = await adapter.configureProviders(
     wallet,
     readChainConfig(),
     role,
     joinSession,
+    { dataDir: storage.dataDir, password: storage.privateStatePassword },
   );
+  // Recorded before joining so a crash still leaves a way back to the store.
+  const record: SessionRecord = {
+    role,
+    sessionId: joinSession,
+    network: adapter.LOCAL_NETWORK_ID,
+    ...providers.storage,
+    contractAddress,
+    phase: "ACTIVE",
+    updatedAt: new Date().toISOString(),
+  };
+  await adapter.saveSessionRecord(storage, record);
   const contract = await adapter.attachNegotiation(
     providers,
     contractAddress,
@@ -297,6 +329,7 @@ const tryJoinOnChain = async (): Promise<void> => {
   if (sessionId !== joinSession) return;
   await adapter.joinDeal(contract);
   if (sessionId !== joinSession) return;
+  sessionRecord = record;
   chainContractAddress = contractAddress;
   chainProviders = providers;
   chainContract = contract;
@@ -319,50 +352,62 @@ const settleOnChain = async (input: {
     import("@midnight-negotiation/midnight-adapter"),
     import("@midnight-negotiation/negotiation-contract"),
   ]);
-  const opening = {
-    price: BigInt(input.price),
-    priceRandomness: contractModule.hexToBytes(input.priceRandomness),
-  };
   await adapter.setSellerPriceOpening(chainProviders, chainContractAddress, {
-    agreedPrice: opening.price,
-    priceRandomness: opening.priceRandomness,
+    agreedPrice: BigInt(input.price),
+    priceRandomness: contractModule.hexToBytes(input.priceRandomness),
   });
-  settledOpening = opening;
   await adapter.settle(chainContract);
   sendChainState("SETTLED");
 };
 
-// Reopens the public price commitment with the opening the Seller settled.
-// The agreed price is never read from the chain because it is not published.
-const verifySettlementOnChain = async (): Promise<void> => {
-  if (
-    !chainMode ||
-    chainContractAddress === undefined ||
-    settledOpening === undefined
-  ) {
-    throw new Error("seller settlement cannot be verified");
+// Drops negotiation secrets held in memory once the session is final. This
+// only releases references; it cannot erase copies the runtime already made.
+const forgetSessionSecrets = (): void => {
+  sellerMinPrice = undefined;
+  sellerChainState = undefined;
+  agreedPrice = undefined;
+  privateKey = undefined;
+  sharedKey = undefined;
+  lastSentOffer = undefined;
+  relayClient?.close();
+  relayClient = undefined;
+  sessionRecord = undefined;
+};
+
+// The runtime reads the chain itself: evidence is saved and verified before
+// the private state is erased, and an unfinished deal keeps everything.
+const finalizeOnChain = async (): Promise<void> => {
+  if (!chainMode || roleStorage === undefined || sessionRecord === undefined) {
+    throw new Error("seller session cannot be finalized");
   }
-  const [adapter, contractModule] = await Promise.all([
-    import("@midnight-negotiation/midnight-adapter"),
-    import("@midnight-negotiation/negotiation-contract"),
-  ]);
-  const ledger = await adapter.queryPublicState(
+  const adapter = await import("@midnight-negotiation/midnight-adapter");
+  const outcome = await adapter.finalizeRoleSession(
+    roleStorage,
     readChainConfig(),
-    chainContractAddress,
+    sessionRecord,
   );
-  const expected = contractModule.priceCommitment(
-    ledger.dealId,
-    settledOpening.price,
-    settledOpening.priceRandomness,
-  );
-  if (
-    ledger.status !== contractModule.Negotiation.DealStatus.SETTLED ||
-    !Buffer.from(ledger.priceCommitment).equals(Buffer.from(expected))
-  ) {
-    emit("ERROR", "SETTLEMENT_VERIFICATION_FAILED", "ROLE_LOCAL");
-    return;
+  switch (outcome.kind) {
+    case "SETTLED_EVIDENCE_SAVED":
+      emit("SETTLED", "SETTLEMENT_VERIFIED", "ROLE_LOCAL");
+      emit("SETTLED", "EVIDENCE_SAVED", "ROLE_LOCAL");
+      emit("SETTLED", "SESSION_CLEANED", "ROLE_LOCAL");
+      forgetSessionSecrets();
+      return;
+    case "CANCELLED_CLEANED":
+      emit("CANCELLED", "SESSION_CLEANED", "ROLE_LOCAL");
+      forgetSessionSecrets();
+      return;
+    case "ALREADY_CLEANED":
+      return;
+    case "KEPT":
+      emit(
+        "ERROR",
+        outcome.reason === "EVIDENCE_REJECTED"
+          ? "SETTLEMENT_VERIFICATION_FAILED"
+          : "SESSION_FINALIZE_PENDING",
+        "ROLE_LOCAL",
+      );
   }
-  emit("SETTLED", "SETTLEMENT_VERIFIED", "ROLE_LOCAL");
 };
 
 const cancelOnChain = async (): Promise<void> => {
@@ -579,7 +624,7 @@ process.on("message", (raw: unknown) => {
         chainJoinStarted = false;
         sellerKeySent = false;
         agreedPrice = undefined;
-        settledOpening = undefined;
+        sessionRecord = undefined;
         const keyPair = generateKeyPairSync("x25519");
         privateKey = keyPair.privateKey;
         emit("ROOM_JOINED", "ROOM_JOINED", "ROLE_LOCAL");
@@ -665,13 +710,13 @@ process.on("message", (raw: unknown) => {
         }
         break;
       }
-      case "VERIFY_SETTLEMENT":
+      case "FINALIZE_SESSION":
         if (sessionId !== command.sessionId) {
           throw new Error("seller settlement session does not match");
         }
-        void verifySettlementOnChain().catch(() => {
+        void finalizeOnChain().catch(() => {
           if (sessionId !== undefined) {
-            emit("ERROR", "SETTLEMENT_VERIFICATION_FAILED", "ROLE_LOCAL");
+            emit("ERROR", "SESSION_FINALIZE_PENDING", "ROLE_LOCAL");
           }
         });
         break;
@@ -711,7 +756,7 @@ process.on("message", (raw: unknown) => {
         chainJoinStarted = false;
         sellerKeySent = false;
         agreedPrice = undefined;
-        settledOpening = undefined;
+        sessionRecord = undefined;
         productCode = undefined;
         sessionId = undefined;
         if (chainWalletPromise === undefined) {

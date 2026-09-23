@@ -10,22 +10,7 @@
   ],
   "references": [
     {
-      "path": "../evidence"
-    },
-    {
-      "path": "../agent-core"
-    },
-    {
       "path": "../negotiation-contract"
-    },
-    {
-      "path": "../midnight-adapter"
-    },
-    {
-      "path": "../protocol"
-    },
-    {
-      "path": "../room-relay"
     }
   ]
 }

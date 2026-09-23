@@ -51,6 +51,10 @@ const messages: Partial<Record<MessageCode, (event: DemoEvent) => string>> = {
     "로컬에 보관한 합의 가격으로 온체인 가격 커밋을 확인했습니다.",
   SETTLEMENT_VERIFICATION_FAILED: () =>
     "온체인 가격 커밋이 보관한 합의 가격과 일치하지 않습니다.",
+  EVIDENCE_SAVED: () => "합의 증빙을 암호화해 로컬에 보관했습니다.",
+  SESSION_CLEANED: () => "협상 중간 기록과 세션 키를 정리했습니다.",
+  SESSION_FINALIZE_PENDING: () =>
+    "합의 증빙 보관을 마치지 못했습니다. 복구용 기록을 유지합니다.",
   OBSERVER_AUTHORIZED: () =>
     "가격 조건 승인 · AUTHORIZED · 금액 비공개",
   OBSERVER_SETTLED: () => "거래 확정 · SETTLED · 금액 비공개",
