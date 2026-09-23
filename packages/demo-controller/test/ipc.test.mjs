@@ -47,6 +47,9 @@ test("scopes the OpenAI credential to Buyer and Seller runtime environments", ()
     MEMO_OPENAI_API_KEY: "memo-secret",
     OPENAI_NEGOTIATION_MODEL: "gpt-configured",
     NEGOTIATION_REFERENCE_PRICE_KRW: "125000",
+    NEGOTIATION_DATA_DIR: "/tmp/negotiation-data",
+    NEGOTIATION_KEY_STORE: "file",
+    NEGOTIATION_KEYCHAIN_SERVICE: "negotiation-test",
   };
 
   const buyer = runtimeProcessEnvironment("buyer", source);
@@ -59,6 +62,9 @@ test("scopes the OpenAI credential to Buyer and Seller runtime environments", ()
     assert.equal(party.OPENAI_NEGOTIATION_MODEL, "gpt-configured");
     assert.equal(party.NEGOTIATION_REFERENCE_PRICE_KRW, "125000");
     assert.equal(party.MEMO_OPENAI_API_KEY, undefined);
+    assert.equal(party.NEGOTIATION_DATA_DIR, "/tmp/negotiation-data");
+    assert.equal(party.NEGOTIATION_KEY_STORE, "file");
+    assert.equal(party.NEGOTIATION_KEYCHAIN_SERVICE, "negotiation-test");
   }
   assert.deepEqual(observer, { PATH: "/usr/bin" });
   assert.equal(observer.OPENAI_API_KEY, undefined);

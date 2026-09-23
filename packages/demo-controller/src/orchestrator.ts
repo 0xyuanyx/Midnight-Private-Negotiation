@@ -117,6 +117,16 @@ export const runtimeProcessEnvironment = (
   environment.NEGOTIATION_AI_PROVIDER = provider;
   environment.NEGOTIATION_REFERENCE_PRICE_KRW =
     source.NEGOTIATION_REFERENCE_PRICE_KRW?.trim() || "100000";
+  // Evidence and private-state storage settings; the key store choice must
+  // reach the runtimes or an explicit file key store would be ignored.
+  for (const key of [
+    "NEGOTIATION_DATA_DIR",
+    "NEGOTIATION_KEY_STORE",
+    "NEGOTIATION_KEYCHAIN_SERVICE",
+  ]) {
+    const value = source[key]?.trim();
+    if (value !== undefined && value.length > 0) environment[key] = value;
+  }
 
   if (provider === "openai") {
     const apiKey =
