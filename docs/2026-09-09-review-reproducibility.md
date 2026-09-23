@@ -335,3 +335,20 @@ midnight-fact-check fast-check로 README와 제출 양식 초안에서 Midnight�
 | 미확정 거래 | 같은 체인을 재사용한 두 번째 시연에서 체인 `AUTHORIZED` 직후 두 런타임을 강제 종료. 체인은 `AUTHORIZED`로 남았고 `recover`는 두 세션 모두 `KEPT (NOT_FINAL)`. 증빙을 만들지 않았고 Buyer 저장소의 가격 opening이 유지됐다 |
 
 한계: "증빙 쓰기 도중 종료 후 복구"는 단위 테스트로만 확인했고 실제 체인에서 쓰기 도중 종료를 재현하지는 않았다. LevelDB 삭제는 논리 삭제라 디스크 잔여 데이터, 백업, OS 스왑까지 지운다고 보장하지 않는다. 상대방·외부 AI의 사본은 지울 수 없다. 체인을 내리면(`midnight:down`) 남은 미확정 세션은 계속 `CHAIN_UNAVAILABLE`로 유지된다.
+
+## 2026-09-24 삭제 안전성 수정과 새 클론 최종 재현
+
+외부 점검에서 두 삭제 경로가 재현됐다. (1) 같은 키로 암호화된 다른 거래 B의 정상 증빙을 거래 A의 증빙 위치에 두면 A의 증빙 없이 A의 private state가 지워졌다. (2) `CANCELLED`에서는 세션의 네트워크·거래 ID를 확인하지 않고 지웠다. `69e80b2`에서 모든 삭제 전에 세션 기록의 역할·네트워크·계약 주소·거래 ID를 체인 상태와 증빙에 대조하도록 고쳤다. 거래 ID를 모르는 세션은 지우지 않고, Seller도 참여 시 거래 ID를 기록한다. 두 사례의 회귀 테스트 4개는 이전 코드에서 실패하고 수정 후 통과한다.
+
+새 클론 재현 중 한 가지를 더 찾아 `79624b7`에서 고쳤다. Controller가 런타임에 넘기는 환경 변수 허용 목록에 `NEGOTIATION_DATA_DIR`, `NEGOTIATION_KEY_STORE`, `NEGOTIATION_KEYCHAIN_SERVICE`가 빠져 있어, 문서에 적은 데이터 위치 변경과 파일 키 저장소 선택이 Buyer·Seller에 전달되지 않았다.
+
+공개 원격 `79624b7`을 새로 클론해 다음을 확인했다(별도 데이터 폴더 `NEGOTIATION_DATA_DIR`, 키는 macOS 키체인).
+
+| 단계 | 결과 |
+|---|---|
+| `npm run bootstrap` | 통과 (75초) |
+| `npm run typecheck` | 통과 |
+| 루트 테스트 | 66/66 |
+| 웹 `npm ci`·테스트 | 8/8 |
+| `npm run demo:local -- --keep-chain`, 성공 시연 110,000,000 / 95,000,000 | Observer `OPEN → AUTHORIZED → SETTLED · 금액 비공개`. 양측 증빙이 지정한 데이터 폴더에 저장되고 두 세션 기록 모두 거래 ID를 가진 채 `CLEANED` |
+| 앱 종료(`Ctrl+C`, 체인 유지) 뒤 `npm run evidence -- verify` | 양측 증빙 복호화, 네트워크·계약 버전·거래 ID·`SETTLED`·가격 commitment 일치, 종료 코드 0 |
