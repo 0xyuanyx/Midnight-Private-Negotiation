@@ -48,6 +48,8 @@ export type MessageCode =
   | "PROOFS_COMPLETE"
   | "NEGOTIATION_SETTLED"
   | "ONCHAIN_RECORDED"
+  | "SETTLEMENT_VERIFIED"
+  | "SETTLEMENT_VERIFICATION_FAILED"
   | "OBSERVER_AUTHORIZED"
   | "OBSERVER_SETTLED"
   | "NEGOTIATION_CANCELLED"
@@ -72,7 +74,6 @@ export type DemoEvent = {
   correlationId?: string;
   replaceKey?: string;
   agreedAmount?: string;
-  publicAmount?: string;
 };
 
 export type ServerMessage =

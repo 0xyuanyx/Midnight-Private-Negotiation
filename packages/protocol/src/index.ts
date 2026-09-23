@@ -100,7 +100,16 @@ export type PublishPublicStateCommand = {
   state: "OPEN" | "AUTHORIZED" | "SETTLED" | "CANCELLED";
   messageCode: string;
   occurredAt: string;
-  publicAmount?: string;
+};
+
+// Asks a party runtime to reopen the public price commitment with its own
+// stored opening after the Observer sees SETTLED. The amount never travels here.
+export type VerifySettlementCommand = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  type: "VERIFY_SETTLEMENT";
+  requestId: string;
+  target: PartyRole;
+  sessionId: string;
 };
 
 export type ShutdownRuntimeCommand = {
@@ -118,6 +127,7 @@ export type RuntimeCommand =
   | ChainFundedCommand
   | ObserveChainStateCommand
   | PublishPublicStateCommand
+  | VerifySettlementCommand
   | StartRuntimeCommand
   | ShutdownRuntimeCommand;
 
@@ -134,7 +144,6 @@ export type DemoEvent = {
   correlationId?: string;
   replaceKey?: string;
   agreedAmount?: string;
-  publicAmount?: string;
 };
 
 export type RuntimeReadyMessage = {
@@ -390,7 +399,6 @@ export const parseRuntimeCommand = (value: unknown, expectedRole?: Role): Runtim
             "messageCode",
             "occurredAt",
           ],
-          ["publicAmount"],
         ) ||
         !isIdentifier(value.requestId) ||
         value.target !== "observer" ||
@@ -399,14 +407,28 @@ export const parseRuntimeCommand = (value: unknown, expectedRole?: Role): Runtim
           value.state as string,
         ) ||
         !isMessageCode(value.messageCode) ||
-        !isIsoDate(value.occurredAt) ||
-        (value.publicAmount !== undefined &&
-          (!isKrwAmount(value.publicAmount) || value.state !== "SETTLED")) ||
-        (value.state === "SETTLED" && value.publicAmount === undefined)
+        !isIsoDate(value.occurredAt)
       ) {
         throw new Error("invalid public state command");
       }
       command = value as PublishPublicStateCommand;
+      break;
+    case "VERIFY_SETTLEMENT":
+      if (
+        !hasExactKeys(value, [
+          "protocolVersion",
+          "type",
+          "requestId",
+          "target",
+          "sessionId",
+        ]) ||
+        !isIdentifier(value.requestId) ||
+        !isPartyRole(value.target) ||
+        !isIdentifier(value.sessionId)
+      ) {
+        throw new Error("invalid settlement verification command");
+      }
+      command = value as VerifySettlementCommand;
       break;
     case "START_RUNTIME":
     case "SHUTDOWN_RUNTIME":
@@ -449,7 +471,6 @@ export const parseDemoEvent = (value: unknown): DemoEvent => {
         "correlationId",
         "replaceKey",
         "agreedAmount",
-        "publicAmount",
       ],
     ) ||
     value.protocolVersion !== PROTOCOL_VERSION ||
@@ -487,14 +508,8 @@ export const parseDemoEvent = (value: unknown): DemoEvent => {
   ) {
     throw new Error("agreed amount is only allowed for participant agreement events");
   }
-  if (value.publicAmount !== undefined && (!isKrwAmount(value.publicAmount) || value.state !== "SETTLED")) {
-    throw new Error("public amount is only allowed for settled events");
-  }
   if (value.panel === "observer" && value.audience !== "PUBLIC") {
     throw new Error("observer events must use the public audience");
-  }
-  if (value.publicAmount !== undefined && value.audience !== "PUBLIC") {
-    throw new Error("settled amount must use the public audience");
   }
   return value as DemoEvent;
 };

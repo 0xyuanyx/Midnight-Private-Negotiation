@@ -20,7 +20,7 @@ const send = (message: RuntimeMessage): void => {
 const emit = (
   state: Parameters<typeof createDemoEvent>[0]["state"],
   messageCode: string,
-  options: { occurredAt?: string; publicAmount?: string } = {},
+  options: { occurredAt?: string } = {},
 ): void => {
   if (sessionId === undefined) throw new Error("observer runtime is not configured");
   send({
@@ -82,11 +82,8 @@ const observeChainState = async (input: {
             ? status === expectedStatus
             : status >= expectedStatus && status !== 4;
         if (reached) {
-          emit(input.expectedState, `OBSERVER_${input.expectedState}`, {
-            ...(input.expectedState === "SETTLED"
-              ? { publicAmount: ledger.finalPrice.toString() }
-              : {}),
-          });
+          // The ledger has no price field; SETTLED is published without an amount.
+          emit(input.expectedState, `OBSERVER_${input.expectedState}`);
           return;
         }
       } catch {
@@ -119,9 +116,6 @@ process.on("message", (raw: unknown) => {
         }
         emit(command.state, command.messageCode, {
           occurredAt: command.occurredAt,
-          ...(command.publicAmount === undefined
-            ? {}
-            : { publicAmount: command.publicAmount }),
         });
         break;
       case "OBSERVE_CHAIN_STATE":
@@ -150,6 +144,7 @@ process.on("message", (raw: unknown) => {
       case "SET_LIMIT":
       case "PEER_READY":
       case "CHAIN_FUNDED":
+      case "VERIFY_SETTLEMENT":
         throw new Error("party command reached observer runtime");
     }
   } catch {

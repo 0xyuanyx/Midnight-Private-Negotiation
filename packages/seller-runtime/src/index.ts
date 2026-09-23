@@ -61,6 +61,7 @@ let sellerChainState: SellerPrivateState | undefined;
 let chainJoinStarted = false;
 let sellerKeySent = false;
 let agreedPrice: string | undefined;
+let settledOpening: { price: bigint; priceRandomness: Uint8Array } | undefined;
 let peerReady = false;
 let lastSentOffer:
   | {
@@ -318,12 +319,50 @@ const settleOnChain = async (input: {
     import("@midnight-negotiation/midnight-adapter"),
     import("@midnight-negotiation/negotiation-contract"),
   ]);
-  await adapter.setSellerPriceOpening(chainProviders, chainContractAddress, {
-    agreedPrice: BigInt(input.price),
+  const opening = {
+    price: BigInt(input.price),
     priceRandomness: contractModule.hexToBytes(input.priceRandomness),
+  };
+  await adapter.setSellerPriceOpening(chainProviders, chainContractAddress, {
+    agreedPrice: opening.price,
+    priceRandomness: opening.priceRandomness,
   });
+  settledOpening = opening;
   await adapter.settle(chainContract);
   sendChainState("SETTLED");
+};
+
+// Reopens the public price commitment with the opening the Seller settled.
+// The agreed price is never read from the chain because it is not published.
+const verifySettlementOnChain = async (): Promise<void> => {
+  if (
+    !chainMode ||
+    chainContractAddress === undefined ||
+    settledOpening === undefined
+  ) {
+    throw new Error("seller settlement cannot be verified");
+  }
+  const [adapter, contractModule] = await Promise.all([
+    import("@midnight-negotiation/midnight-adapter"),
+    import("@midnight-negotiation/negotiation-contract"),
+  ]);
+  const ledger = await adapter.queryPublicState(
+    readChainConfig(),
+    chainContractAddress,
+  );
+  const expected = contractModule.priceCommitment(
+    ledger.dealId,
+    settledOpening.price,
+    settledOpening.priceRandomness,
+  );
+  if (
+    ledger.status !== contractModule.Negotiation.DealStatus.SETTLED ||
+    !Buffer.from(ledger.priceCommitment).equals(Buffer.from(expected))
+  ) {
+    emit("ERROR", "SETTLEMENT_VERIFICATION_FAILED", "ROLE_LOCAL");
+    return;
+  }
+  emit("SETTLED", "SETTLEMENT_VERIFIED", "ROLE_LOCAL");
 };
 
 const cancelOnChain = async (): Promise<void> => {
@@ -540,6 +579,7 @@ process.on("message", (raw: unknown) => {
         chainJoinStarted = false;
         sellerKeySent = false;
         agreedPrice = undefined;
+        settledOpening = undefined;
         const keyPair = generateKeyPairSync("x25519");
         privateKey = keyPair.privateKey;
         emit("ROOM_JOINED", "ROOM_JOINED", "ROLE_LOCAL");
@@ -625,6 +665,16 @@ process.on("message", (raw: unknown) => {
         }
         break;
       }
+      case "VERIFY_SETTLEMENT":
+        if (sessionId !== command.sessionId) {
+          throw new Error("seller settlement session does not match");
+        }
+        void verifySettlementOnChain().catch(() => {
+          if (sessionId !== undefined) {
+            emit("ERROR", "SETTLEMENT_VERIFICATION_FAILED", "ROLE_LOCAL");
+          }
+        });
+        break;
       case "CHAIN_FUNDED":
         chainFundedResolve?.();
         chainFundedResolve = undefined;
@@ -661,6 +711,7 @@ process.on("message", (raw: unknown) => {
         chainJoinStarted = false;
         sellerKeySent = false;
         agreedPrice = undefined;
+        settledOpening = undefined;
         productCode = undefined;
         sessionId = undefined;
         if (chainWalletPromise === undefined) {

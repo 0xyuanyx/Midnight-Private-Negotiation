@@ -16,7 +16,6 @@ export sealed ledger sellerKey: Bytes<32>;
 export sealed ledger buyerCommitment: Bytes<32>;
 export ledger sellerCommitment: Bytes<32>;
 export ledger priceCommitment: Bytes<32>;
-export ledger finalPrice: Uint<64>;
 export ledger status: DealStatus;
 
 witness buyerSecretKey(): Bytes<32>;
@@ -42,7 +41,6 @@ constructor(
   buyerCommitment = disclose(_buyerCommitment);
   sellerCommitment = disclose(pad(32, ""));
   priceCommitment = disclose(pad(32, ""));
-  finalPrice = 0;
   status = DealStatus.WAITING_SELLER;
 }
 
@@ -99,7 +97,7 @@ export circuit settle(): [] {
   );
   assert(minPrice <= price, "price is below seller minimum");
 
-  finalPrice = disclose(price);
+  // The agreed price stays private: only priceCommitment is public.
   status = DealStatus.SETTLED;
 }
 

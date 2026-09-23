@@ -1,14 +1,14 @@
 # Midnight Private Negotiation DApp
 
-> **2026-09-23 검토:** 현재 버전은 최종 합의 가격을 공개합니다. 한도 원문 미전송과 별개로 fallback 제안에서 한도를 좁혀 추정하는 경로도 확인됐습니다. [평가 보고서](docs/research/2026-09-23-product-award-review.md)와 [전체 제품·기술 방향성](docs/2026-09-23-private-negotiation-direction.md)을 참고하세요. 최종가 비공개·중간 기록 폐기·최종 증빙 보관은 후속 목표이며 아직 구현·검증되지 않았습니다.
+> **2026-09-23 변경:** 최종 합의 가격도 더 이상 공개 원장에 기록하지 않습니다. 계약은 가격 commitment와 상태만 남기고, 거래 당사자는 자기가 보관한 가격과 난수로 온체인 commitment를 다시 확인합니다. 또 fallback 제안이 비공개 한도의 비율로 가격을 만들어 한도를 좁혀 추정할 수 있던 경로를 없애고, 제안 가격을 공개 기준가와 라운드로만 계산하도록 바꿨습니다. 근거는 [평가 보고서](docs/research/2026-09-23-product-award-review.md)와 [전체 제품·기술 방향성](docs/2026-09-23-private-negotiation-direction.md)에 있습니다. 중간 기록 폐기와 최종 증빙의 암호화 보관은 아직 후속 목표입니다.
 
-구매자와 판매자의 예약 가격을 상대방·AI·Relay·공개 원장에 전달하지 않고 협상한 뒤, 합의가 성립하면 최종 가격을 Midnight에 공개하는 데모 DApp입니다.
+구매자와 판매자의 예약 가격을 상대방·AI·Relay·공개 원장에 전달하지 않고 협상한 뒤, 합의가 성립하면 합의 가격을 공개하지 않은 채 두 한도 조건을 만족했다는 사실만 Midnight에 확정하는 데모 DApp입니다. 합의 가격은 거래 당사자만 압니다.
 
 제출 시나리오는 가상의 원사업자(Buyer)와 수급사업자(Seller)가 **하도급 부품 납품 단가**를 협상하는 경우입니다. 국내 하도급법은 원사업자가 수급사업자에게 재료비·노무비 같은 원가 정보를 정당한 사유 없이 요구하는 것을 금지합니다. 그래도 수급사업자는 원가를 근거로 한 최저 수용가를 가지고 협상하며, 중소벤처기업부 2024년 납품대금 연동제 실태조사에서도 미연동 약정 기업의 1순위 사유가 위탁기업에 원가 정보를 제공하기 싫다는 응답(35개사 중 45.7%)이었습니다. 이 데모는 그런 거래에서 양측 한도를 공개하지 않고 단가를 합의하는 흐름을 보여줍니다. 근거와 한계는 [국내 하도급 원가 공개 부담 조사](docs/research/2026-09-17-subcontract-cost-disclosure.md)에 정리했습니다.
 
 시연용 공개 기준가격은 **100,000,000 KRW**입니다. 품목은 발표 맥락에만 쓰는 정적 예시이며 현재 AI 요청이나 계약 데이터에는 포함되지 않습니다. 실제 AI 입력은 상품 코드, 공개 기준가격, 현재 제안, 라운드와 역할 정보로 제한됩니다. 아래 금액은 모두 시연 값이며 실제 거래 가격이나 고객 검증 결과가 아닙니다. 이 데모는 하도급법이나 연동제 준수를 판정하거나 증명하지 않으며, 원가의 진위를 확인하지 않습니다. 납품대금 연동 조정을 비공개 원재료 비중으로 증명하는 회로는 후속 제안이며 구현하지 않았습니다.
 
-구매자 최대 승인 한도와 판매자 최저 수용가는 상대방·AI·Relay·공개 원장에 전달하지 않습니다. 현재 단일 브라우저와 로컬 Demo Controller는 데모 신뢰 경계 안에 있으며, Controller는 입력 한도를 대상 역할 런타임에 평문으로 전달합니다. 계약이 `SETTLED`가 되면 최종 합의 가격이 공개됩니다. 이 데모는 분리된 구매자·판매자 클라이언트나 최종 계약가 비공개를 구현하지 않습니다.
+구매자 최대 승인 한도와 판매자 최저 수용가는 상대방·AI·Relay·공개 원장에 전달하지 않습니다. 현재 단일 브라우저와 로컬 Demo Controller는 데모 신뢰 경계 안에 있으며, Controller는 입력 한도를 대상 역할 런타임에 평문으로 전달합니다. 계약이 `SETTLED`가 되어도 공개 원장에는 합의 가격이 아니라 가격 commitment만 남습니다. 다만 같은 화면의 Buyer·Seller 패널은 거래 당사자로서 합의 가격을 표시하고, 이 값은 로컬 Controller를 거칩니다. 이 데모는 분리된 구매자·판매자 클라이언트를 구현하지 않습니다.
 
 현재 루트는 새 DApp(v2)의 설계와 구현을 위한 작업 공간입니다. Counter 예제를 기반으로 만든 이전 데모는 `v1/`에 로컬 아카이브로 보존하지만, Git 추적과 원격 저장소에서는 제외합니다.
 
@@ -20,7 +20,8 @@
 - GPT에는 정확한 한도를 전달하지 않고 공개 기준가·현재 제안·협상 맥락만 전달
 - 로컬 `PolicyGuard`와 `StrategyGuard`가 후보 제안의 역할별 한도와 단계적 가격 전략을 검사
 - 역할 간 협상 메시지는 Room Relay를 통해 암호문으로 전달
-- Observer는 Midnight Indexer의 공개 상태와 최종 합의 금액만 표시
+- Observer는 Midnight Indexer의 공개 상태만 표시하며 합의 금액은 어느 단계에서도 표시하지 않음
+- 협상 제안 가격은 공개 기준가와 라운드로만 계산하는 공개 제안 사다리에서 나오며, 비공개 한도는 수락·역제안·중단 판단에만 사용
 - 최대 10라운드는 내부 종료 조건으로만 사용하고 화면에는 라운드 수·중간 제안·재시도 횟수를 표시하지 않음
 - 사용자 로그는 한글 설명을 먼저 쓰고 `OPEN`, `AUTHORIZED`, `SETTLED` 같은 실제 계약 상태를 함께 표시
 
@@ -46,9 +47,9 @@
 └── docs/               # 새 DApp 설계 문서
 ```
 
-공용 프로토콜, 별도 역할 프로세스, WebSocket Controller와 3패널 웹 DApp이 구현되어 있습니다. 브라우저는 로그를 자체 생성하지 않고 검증된 런타임 이벤트만 표시합니다. mock과 실제 OpenAI provider는 공개 기준가·현재 제안·라운드만으로 최대 다섯 후보를 생성하고, 각 역할의 로컬 `PolicyGuard`와 `StrategyGuard`가 자기 한도와 가격 전략에 맞는지 검사합니다. 외부 AI가 없거나 모든 후보가 정책을 통과하지 못하면 역할 런타임 내부의 결정론적 fallback이 제안·수락을 이어받습니다. 한도는 Controller를 거쳐 대상 역할 런타임에 전달되지만 GPT 입력이나 로그에는 포함되지 않습니다. 실패 후보와 stateless 재요청도 화면·IPC·Relay에 노출되지 않습니다. Room Relay는 Controller와 분리된 네 번째 프로세스로 실행되며 Buyer·Seller가 로컬 TCP로 직접 연결합니다. 역할 간 협상 패킷은 임시 X25519 공유 비밀에서 HKDF-SHA-256 세션 키를 만들고, 방·역할·순번을 AAD로 묶은 AES-256-GCM 암호문만 Relay에 전달합니다.
+공용 프로토콜, 별도 역할 프로세스, WebSocket Controller와 3패널 웹 DApp이 구현되어 있습니다. 브라우저는 로그를 자체 생성하지 않고 검증된 런타임 이벤트만 표시합니다. mock과 실제 OpenAI provider는 공개 기준가·현재 제안·라운드만으로 최대 다섯 후보를 생성하고, 각 역할의 로컬 `PolicyGuard`와 `StrategyGuard`가 자기 한도와 가격 전략에 맞는지 검사합니다. 외부 AI가 없거나 모든 후보가 정책을 통과하지 못하면 역할 런타임 내부의 결정론적 fallback이 제안·수락을 이어받습니다. fallback과 `StrategyGuard`는 공개 제안 사다리만 사용합니다. Buyer의 N라운드 제안은 공개 기준가의 90%+2%p×(N−1)을 250원 단위로 내림한 값, Seller는 110%−2%p×(N−1)을 올림한 값입니다. 사다리 가격이 자기 한도를 벗어나면 한도에 맞춰 가격을 깎지 않고 협상을 멈춥니다. 따라서 보낸 제안 가격은 한도와 무관하지만, 수락·중단 시점은 한도가 사다리의 어느 2%p 구간에 있는지 알려줄 수 있습니다. 공개 기준가에서 크게 벗어난 한도는 겹치더라도 결렬될 수 있습니다. 한도는 Controller를 거쳐 대상 역할 런타임에 전달되지만 GPT 입력이나 로그에는 포함되지 않습니다. 실패 후보와 stateless 재요청도 화면·IPC·Relay에 노출되지 않습니다. Room Relay는 Controller와 분리된 네 번째 프로세스로 실행되며 Buyer·Seller가 로컬 TCP로 직접 연결합니다. 역할 간 협상 패킷은 임시 X25519 공유 비밀에서 HKDF-SHA-256 세션 키를 만들고, 방·역할·순번을 AAD로 묶은 AES-256-GCM 암호문만 Relay에 전달합니다.
 
-Midnight 로컬 체인 모드에서는 Seller가 암호화 relay로 자기 공개키를 먼저 보내고, Buyer가 그 키를 생성자에 고정해 계약을 배포합니다. 이후 Seller가 `joinDeal`, Buyer가 `authorizeHiddenPrice`, Seller가 `settle`을 각각 자기 프로세스와 전용 proof server에서 실행합니다. `joinDeal`은 배포 시 고정된 Seller 키로만 호출할 수 있으므로 제3자가 Seller 자리를 먼저 차지할 수 없습니다. 계약은 Buyer가 연 가격이 Buyer의 가격 commitment와 같고 Seller 최저가 이상인지만 검사하며, 협상에서 합의한 가격인지는 알지 못합니다. 그래서 Seller 런타임이 자기가 기록한 합의 가격과 Buyer가 여는 가격을 오프체인에서 대조하고, 다르면 정산하지 않고 거래를 취소합니다. 계약 상태는 배포 시 `WAITING_SELLER`에서 시작해 `OPEN → AUTHORIZED → SETTLED`로 진행하고, 정산 전에는 어느 단계에서든 `CANCELLED`로 끝날 수 있습니다. Controller의 타이머가 공개 상태를 만들지 않으며, 지갑이 보고한 트랜잭션 완료 뒤에도 Observer가 Indexer에서 각 상태를 확인해야 웹에 표시됩니다. Buyer·Seller 한도는 계약의 witness로만 사용되고 공개 ledger에는 commitment만 남습니다. `finalPrice`는 공개 ledger 필드라 언제든 읽을 수 있지만 `settle` 전까지 0이며, `SETTLED`에서만 합의 가격이 기록됩니다. 새 코드에서는 `counter` 레거시 명칭을 사용하지 않습니다.
+Midnight 로컬 체인 모드에서는 Seller가 암호화 relay로 자기 공개키를 먼저 보내고, Buyer가 그 키를 생성자에 고정해 계약을 배포합니다. 이후 Seller가 `joinDeal`, Buyer가 `authorizeHiddenPrice`, Seller가 `settle`을 각각 자기 프로세스와 전용 proof server에서 실행합니다. `joinDeal`은 배포 시 고정된 Seller 키로만 호출할 수 있으므로 제3자가 Seller 자리를 먼저 차지할 수 없습니다. 계약은 Buyer가 연 가격이 Buyer의 가격 commitment와 같고 Seller 최저가 이상인지만 검사하며, 협상에서 합의한 가격인지는 알지 못합니다. 그래서 Seller 런타임이 자기가 기록한 합의 가격과 Buyer가 여는 가격을 오프체인에서 대조하고, 다르면 정산하지 않고 거래를 취소합니다. 계약 상태는 배포 시 `WAITING_SELLER`에서 시작해 `OPEN → AUTHORIZED → SETTLED`로 진행하고, 정산 전에는 어느 단계에서든 `CANCELLED`로 끝날 수 있습니다. Controller의 타이머가 공개 상태를 만들지 않으며, 지갑이 보고한 트랜잭션 완료 뒤에도 Observer가 Indexer에서 각 상태를 확인해야 웹에 표시됩니다. Buyer·Seller 한도와 합의 가격은 계약의 witness로만 사용되고 공개 ledger에는 commitment만 남습니다. 공개 ledger 필드는 `dealId`, `buyerKey`, `sellerKey`, `buyerCommitment`, `sellerCommitment`, `priceCommitment`, `status`뿐입니다. `SETTLED`가 확인되면 Buyer와 Seller 런타임이 각자 보관한 합의 가격과 난수로 `priceCommitment`를 다시 계산해 Indexer의 값과 일치하는지 확인합니다. 가격 commitment의 은닉성은 가격 난수가 비밀로 유지된다는 전제에 의존합니다. 계약 주소, 호출한 회로 이름, 상태 변화 시점은 공개됩니다. 새 코드에서는 `counter` 레거시 명칭을 사용하지 않습니다.
 
 한 역할이 늦게 입장했을 때 상대가 이미 입장했거나 상대 가격 커밋이 이미 준비되어 있으면 완료 이벤트를 먼저 동기화하고 불필요한 대기 로그를 만들지 않습니다. 대기 로그는 아직 충족되지 않은 상태에만 회전 아이콘과 함께 표시됩니다. 화면에는 같은 4자리 상품 코드를 유지하지만 내부 session ID는 브라우저 데모 인스턴스별로 분리하므로, 페이지를 새로 열어 같은 코드를 사용해도 이전 실행 상태와 섞이지 않습니다.
 
@@ -159,7 +160,7 @@ NEGOTIATION_REFERENCE_PRICE_KRW=100000000 npm run demo:midnight:mock
 npm --prefix apps/demo-web run dev -- --port 3001
 ```
 
-각 명령은 별도 터미널에서 실행합니다. `http://localhost:3001/`에서 Buyer와 Seller가 각각 상품 코드 `4821`을 입력합니다. 성공 시연은 Buyer 최대 한도 `110000000`, Seller 최소 금액 `95000000`을 입력해 Observer의 `OPEN → AUTHORIZED → SETTLED`와 최종 공개 가격을 확인합니다. 화면을 초기화한 뒤 결렬 시연에는 Buyer `90000000`, Seller `95000000`을 입력합니다. 한도가 겹치지 않으면 `CANCELLED`로 종료되고 결렬 가격은 표시하지 않습니다. 제3자 정산 거절은 아래 계약 테스트로 재현합니다.
+각 명령은 별도 터미널에서 실행합니다. `http://localhost:3001/`에서 Buyer와 Seller가 각각 상품 코드 `4821`을 입력합니다. 성공 시연은 Buyer 최대 한도 `110000000`, Seller 최소 금액 `95000000`을 입력해 Observer의 `OPEN → AUTHORIZED → SETTLED · 금액 비공개`와 두 당사자 패널의 합의 가격·commitment 확인 문구를 확인합니다. 화면을 초기화한 뒤 결렬 시연에는 Buyer `90000000`, Seller `95000000`을 입력합니다. 한도가 겹치지 않으면 `CANCELLED`로 종료되고 결렬 가격은 표시하지 않습니다. 제3자 정산 거절은 아래 계약 테스트로 재현합니다.
 
 다른 로컬 Midnight 프로젝트가 기본 포트 `9944` 또는 `8088`을 사용 중이면 해당 컨테이너를 중단할 필요가 없습니다. 이 프로젝트의 Node와 Indexer 호스트 포트만 바꿔 실행할 수 있습니다. 다른 두 터미널의 웹 명령은 그대로 사용합니다.
 
@@ -218,7 +219,7 @@ npm run test:openai
 
 2026-09-11 실제 OpenAI 평가에서 `gpt-5.6-sol`로 31개 API 요청을 수행했습니다. 모델 후보가 사용된 두 합의 시나리오는 각각 `SETTLED`에 도달했고, 한도가 겹치지 않는 시나리오는 모델을 호출하지 않고 10라운드 뒤 `CANCELLED`로 종료했습니다. 요청 본문에 허용된 공개 필드만 포함되고 `store: false`인지 검사하는 privacy audit도 통과했습니다. 이 평가는 협상 평가 스크립트 기준이며 Midnight 온체인 정산 검증과는 구분합니다.
 
-아래 표는 2026-09-17까지 확인한 검증 상태입니다. 실제 모델 평가는 2026-09-11 OpenAI 전용 시나리오에서, 이번 B2B 온체인 성공·결렬 시연은 2026-09-17 mock 협상 provider와 로컬 Midnight Node·Indexer·proof server에서 각각 실행했습니다.
+아래 표는 2026-09-23까지 확인한 검증 상태입니다. 실제 모델 평가는 2026-09-11 OpenAI 전용 시나리오에서, 이번 B2B 온체인 성공·결렬 시연은 2026-09-17 mock 협상 provider와 로컬 Midnight Node·Indexer·proof server에서 각각 실행했습니다.
 
 | 검증 대상 | 상태 | 확인 내용 |
 |---|---|---|
@@ -226,10 +227,10 @@ npm run test:openai
 | 요청 데이터 경계 | 완료 | 공개 필드만 전송, `store: false`, strict JSON schema |
 | PolicyGuard·fallback | 완료 | API 실패 후 역할 로컬 fallback으로 `SETTLED` 완료 |
 | 실제 모델 협상 품질 | 완료 | 2026-09-11 `gpt-5.6-sol` 31회 요청, 모델 선택 5회, 합의 2건 `SETTLED` |
-| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-18 Seller 고정 계약으로 성공 `OPEN → AUTHORIZED → SETTLED · 100,000,000 KRW`(입력 순서 두 가지 각 1회)와 결렬 `OPEN → CANCELLED · 공개된 금액 없음` 확인. 제3자의 참여·승인·정산·취소 거절을 포함한 계약 테스트 8/8 통과 |
+| Midnight 계약 | 로컬 네트워크 완료 | 2026-09-23 최종가 비공개 계약으로 성공 `OPEN → AUTHORIZED → SETTLED · 금액 비공개`와 양측 commitment 확인, 결렬 `OPEN → CANCELLED · 공개된 금액 없음` 확인. Indexer의 트랜잭션 7건 원문과 계약 상태에서 합의 가격·양측 한도의 인코딩 값이 발견되지 않음. 제3자의 참여·승인·정산·취소 거절과 가격 비공개 검사를 포함한 계약 테스트 8/8 통과 |
 | 공개 테스트넷·메인넷 | 미실행 | 현재 데모는 공개 네트워크 배포를 주장하지 않음 |
 
-현재 루트 테스트는 47/47, 웹 테스트는 8/8 통과합니다. 2026-09-19에 최종 커밋 `beef1d9`를 공개 원격에서 새로 클론해 `compact compile +0.31.1`, `npm run bootstrap`, `npm run typecheck`, 루트 테스트 47/47, 웹 `npm ci`와 웹 테스트 8/8이 모두 통과하는 것을 확인했습니다. 이 새 클론 검증에는 Docker 로컬 체인 재기동이 포함되지 않았고, 공개 테스트넷 배포와 호스팅된 라이브 데모 URL도 준비되지 않았습니다. 자세한 명령과 범위는 [재현성 기록](docs/2026-09-09-review-reproducibility.md)에 있습니다.
+2026-09-23 최종가 비공개 전환 뒤 루트 테스트 50/50, 웹 테스트 8/8, `typecheck`가 통과합니다. 아래 새 클론 기록은 전환 이전 커밋 기준입니다. 2026-09-19에 최종 커밋 `beef1d9`를 공개 원격에서 새로 클론해 `compact compile +0.31.1`, `npm run bootstrap`, `npm run typecheck`, 루트 테스트 47/47, 웹 `npm ci`와 웹 테스트 8/8이 모두 통과하는 것을 확인했습니다. 이 새 클론 검증에는 Docker 로컬 체인 재기동이 포함되지 않았고, 공개 테스트넷 배포와 호스팅된 라이브 데모 URL도 준비되지 않았습니다. 자세한 명령과 범위는 [재현성 기록](docs/2026-09-09-review-reproducibility.md)에 있습니다.
 
 ## v2 기반 검증
 
@@ -239,7 +240,7 @@ npm run typecheck
 npm test
 ```
 
-테스트는 Buyer·Seller·Observer와 Room Relay의 프로세스 격리, 상품 코드 입장, commitment 대기와 공동 타임스탬프, GPT mock 및 OpenAI 요청의 비밀 필드 거부, strict Structured Outputs 파싱, 역할별 PolicyGuard, stateless 재요청, Observer·Relay 키 비전달, 외부 AI 키 없는 고액 조건 fallback, 최대 10라운드 성사·결렬 분기, 결렬 시 증명 생략, 한도 원문 비노출, Controller의 암호문 비수신, Relay envelope의 평문 필드 거부, 메타데이터·인증 태그 변조, sequence replay, nonce 재사용, 다른 방 패킷 차단, Observer 공개 이벤트 제한을 확인합니다.
+테스트는 Buyer·Seller·Observer와 Room Relay의 프로세스 격리, 상품 코드 입장, commitment 대기와 공동 타임스탬프, GPT mock 및 OpenAI 요청의 비밀 필드 거부, strict Structured Outputs 파싱, 역할별 PolicyGuard, stateless 재요청, Observer·Relay 키 비전달, 공개 제안 사다리와 한도 역산 회귀, 공개 기준가에서 먼 한도의 결렬, 최대 10라운드 성사·결렬 분기, 결렬 시 증명 생략, 한도 원문 비노출, 공개 ledger·transcript의 합의 가격 부재, 공개 이벤트의 금액 필드 거부, Controller의 암호문 비수신, Relay envelope의 평문 필드 거부, 메타데이터·인증 태그 변조, sequence replay, nonce 재사용, 다른 방 패킷 차단, Observer 공개 이벤트 제한을 확인합니다.
 
 웹 DApp 검증:
 

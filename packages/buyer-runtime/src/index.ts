@@ -365,6 +365,40 @@ const cancelOnChain = async (): Promise<void> => {
   sendChainState("CANCELLED");
 };
 
+// Reopens the public price commitment with the Buyer's own stored opening.
+// The agreed price is never read from the chain because it is not published.
+const verifySettlementOnChain = async (): Promise<void> => {
+  if (
+    !chainMode ||
+    chainContractAddress === undefined ||
+    chainDealId === undefined ||
+    buyerChainState === undefined
+  ) {
+    throw new Error("buyer settlement cannot be verified");
+  }
+  const [adapter, contractModule] = await Promise.all([
+    import("@midnight-negotiation/midnight-adapter"),
+    import("@midnight-negotiation/negotiation-contract"),
+  ]);
+  const ledger = await adapter.queryPublicState(
+    readChainConfig(),
+    chainContractAddress,
+  );
+  const expected = contractModule.priceCommitment(
+    chainDealId,
+    buyerChainState.agreedPrice,
+    buyerChainState.priceRandomness,
+  );
+  if (
+    ledger.status !== contractModule.Negotiation.DealStatus.SETTLED ||
+    !Buffer.from(ledger.priceCommitment).equals(Buffer.from(expected))
+  ) {
+    emit("ERROR", "SETTLEMENT_VERIFICATION_FAILED", "ROLE_LOCAL");
+    return;
+  }
+  emit("SETTLED", "SETTLEMENT_VERIFIED", "ROLE_LOCAL");
+};
+
 const acceptPeerKey = (message: RelayPeerKey): void => {
   if (
     sessionId === undefined ||
@@ -695,6 +729,16 @@ process.on("message", (raw: unknown) => {
         }
         break;
       }
+      case "VERIFY_SETTLEMENT":
+        if (sessionId !== command.sessionId) {
+          throw new Error("buyer settlement session does not match");
+        }
+        void verifySettlementOnChain().catch(() => {
+          if (sessionId !== undefined) {
+            emit("ERROR", "SETTLEMENT_VERIFICATION_FAILED", "ROLE_LOCAL");
+          }
+        });
+        break;
       case "CHAIN_FUNDED":
         chainFundedResolve?.();
         chainFundedResolve = undefined;

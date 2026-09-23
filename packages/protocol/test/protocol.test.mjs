@@ -103,21 +103,54 @@ test("rejects secret-bearing or premature amount fields in display events", () =
   );
   assert.throws(
     () => parseDemoEvent({ ...base, publicAmount: "100000" }),
-    /settled/,
+    /invalid demo event/,
   );
 });
 
-test("allows the final amount only in a settled event", () => {
-  const event = createDemoEvent({
+test("keeps every amount out of public settlement events and commands", () => {
+  const settled = createDemoEvent({
     panel: "observer",
     sessionId: "session-1",
     state: "SETTLED",
-    messageCode: "SETTLEMENT_RECORDED",
+    messageCode: "OBSERVER_SETTLED",
     audience: "PUBLIC",
-    publicAmount: "100000",
   });
+  assert.equal("publicAmount" in settled, false);
+  assert.throws(
+    () => parseDemoEvent({ ...settled, publicAmount: "100000" }),
+    /invalid demo event/,
+  );
+  assert.throws(
+    () => parseDemoEvent({ ...settled, agreedAmount: "100000" }),
+    /agreed amount/,
+  );
+  assert.throws(() =>
+    parseRuntimeCommand({
+      protocolVersion: PROTOCOL_VERSION,
+      type: "PUBLISH_PUBLIC_STATE",
+      requestId: "request-public",
+      target: "observer",
+      sessionId: "session-1",
+      state: "SETTLED",
+      messageCode: "OBSERVER_SETTLED",
+      occurredAt: new Date().toISOString(),
+      publicAmount: "100000",
+    }),
+  );
+});
 
-  assert.equal(event.publicAmount, "100000");
+test("routes settlement verification only to party runtimes without an amount", () => {
+  const command = {
+    protocolVersion: PROTOCOL_VERSION,
+    type: "VERIFY_SETTLEMENT",
+    requestId: "request-verify",
+    target: "seller",
+    sessionId: "session-1",
+  };
+  assert.equal(parseRuntimeCommand(command, "seller").type, "VERIFY_SETTLEMENT");
+  assert.throws(() => parseRuntimeCommand({ ...command, target: "observer" }));
+  assert.throws(() => parseRuntimeCommand({ ...command, agreedAmount: "100000" }));
+  assert.throws(() => parseRuntimeCommand(command, "buyer"));
 });
 
 test("allows an agreed amount only in participant agreement events", () => {

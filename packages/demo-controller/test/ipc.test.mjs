@@ -297,7 +297,11 @@ test("streams the private negotiation flow from three isolated runtimes", async 
         Date.parse(buyerNegotiatingEvent.occurredAt),
     );
     assert.equal(openEvent.audience, "PUBLIC");
-    assert.equal(settledEvent.publicAmount, "100000");
+    assert.equal("publicAmount" in settledEvent, false);
+    assert.equal(
+      JSON.stringify(events.filter((event) => event.audience === "PUBLIC")).includes("100000"),
+      false,
+    );
 
     const buyerProgress = events
       .filter((event) => event.panel === "buyer")
@@ -408,7 +412,15 @@ test("syncs an existing Buyer commitment before a late Seller enters a limit", a
       limitKrw: "95000",
     });
     const result = await settled;
-    assert.equal(result.publicAmount, "100000");
+    assert.equal("publicAmount" in result, false);
+    assert.ok(
+      events.some(
+        (event) =>
+          event.panel === "seller" &&
+          event.messageCode === "NEGOTIATION_SETTLED" &&
+          event.agreedAmount === "100000",
+      ),
+    );
     assert.equal(
       events.some(
         (event) =>
@@ -457,13 +469,20 @@ test("settles overlapping 110,000 and 95,000 KRW limits without an external AI k
       (event) =>
         event.panel === "observer" && event.messageCode === "OBSERVER_SETTLED",
     );
+    const agreed = waitFor(
+      controller,
+      (event) =>
+        event.panel === "buyer" && event.messageCode === "NEGOTIATION_SETTLED",
+    );
     controller.setLimit("seller", {
       sessionId: "room-1111",
       limitKrw: "95000",
     });
 
-    const event = await settled;
-    assert.equal(event.publicAmount, "100000");
+    const [event, agreement] = await Promise.all([settled, agreed]);
+    assert.equal("publicAmount" in event, false);
+    assert.equal(agreement.agreedAmount, "100000");
+    assert.equal(agreement.audience, "PARTICIPANTS");
   } finally {
     await controller.shutdown();
   }

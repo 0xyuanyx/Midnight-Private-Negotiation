@@ -9,6 +9,7 @@ import {
   Negotiation,
   hexToBytes,
   limitCommitment,
+  priceCommitment,
   publicKeyForSecret,
   withSellerPriceOpening,
   witnesses,
@@ -61,6 +62,12 @@ const createSimulation = (input) => {
       buyerState.buyerLimitRandomness,
     ),
   );
+  const publicTranscripts = [];
+  const run = (circuit) => {
+    const result = contract.impureCircuits[circuit](context);
+    publicTranscripts.push(result.proofData.publicTranscript);
+    context = result.context;
+  };
   let context = createCircuitContext(
     sampleContractAddress(),
     initial.currentZswapLocalState,
@@ -69,6 +76,8 @@ const createSimulation = (input) => {
   );
   return {
     ledger: () => Negotiation.ledger(context.currentQueryContext.state),
+    publicTranscripts,
+    dealId,
     join: () => {
       context.currentPrivateState = sellerState;
       context = contract.impureCircuits.joinDeal(context).context;
@@ -109,11 +118,11 @@ const createSimulation = (input) => {
     },
     authorize: () => {
       context.currentPrivateState = buyerState;
-      context = contract.impureCircuits.authorizeHiddenPrice(context).context;
+      run("authorizeHiddenPrice");
     },
     settle: (opening = { agreedPrice: input.price, priceRandomness: buyerState.priceRandomness }) => {
       context.currentPrivateState = withSellerPriceOpening(sellerState, opening);
-      context = contract.impureCircuits.settle(context).context;
+      run("settle");
     },
     settleAsThirdParty: () => {
       context.currentPrivateState = withSellerPriceOpening(
@@ -131,20 +140,72 @@ const createSimulation = (input) => {
   };
 };
 
-test("supports KRW prices above the old Uint16 ceiling and reveals only at SETTLED", () => {
-  const simulation = createSimulation(scenario());
+const serializePublic = (value) =>
+  JSON.stringify(value, (_key, item) =>
+    typeof item === "bigint"
+      ? item.toString()
+      : item instanceof Uint8Array
+        ? Buffer.from(item).toString("hex")
+        : item,
+  );
+
+// Little-endian hex as the Compact runtime encodes integers in transcripts.
+const littleEndianHex = (value) => {
+  let hex = value.toString(16);
+  if (hex.length % 2 === 1) hex = `0${hex}`;
+  return Buffer.from(hex, "hex").reverse().toString("hex");
+};
+
+test("settles without putting the agreed price or limits on the public ledger or transcripts", () => {
+  const input = scenario({
+    buyerMax: 110_000_000n,
+    sellerMin: 95_000_000n,
+    price: 100_000_000n,
+  });
+  const simulation = createSimulation(input);
   assert.equal(simulation.ledger().status, Negotiation.DealStatus.WAITING_SELLER);
-  assert.equal(simulation.ledger().finalPrice, 0n);
+  assert.equal("finalPrice" in simulation.ledger(), false);
 
   simulation.join();
   assert.equal(simulation.ledger().status, Negotiation.DealStatus.OPEN);
   simulation.authorize();
   assert.equal(simulation.ledger().status, Negotiation.DealStatus.AUTHORIZED);
-  assert.equal(simulation.ledger().finalPrice, 0n);
   simulation.settle();
-
   assert.equal(simulation.ledger().status, Negotiation.DealStatus.SETTLED);
-  assert.equal(simulation.ledger().finalPrice, 100_000n);
+
+  const ledger = simulation.ledger();
+  assert.deepEqual(
+    Object.keys(ledger).sort(),
+    [
+      "buyerCommitment",
+      "buyerKey",
+      "dealId",
+      "priceCommitment",
+      "sellerCommitment",
+      "sellerKey",
+      "status",
+    ],
+  );
+  // Either party can reopen the public commitment with its stored opening.
+  assert.deepEqual(
+    ledger.priceCommitment,
+    priceCommitment(
+      simulation.dealId,
+      input.price,
+      hexToBytes(input.priceRandomness),
+    ),
+  );
+
+  const publicData = serializePublic({
+    ledger,
+    transcripts: simulation.publicTranscripts,
+  });
+  assert.equal(simulation.publicTranscripts.length, 2);
+  for (const secret of [input.price, input.buyerMax, input.sellerMin]) {
+    assert.equal(publicData.includes(littleEndianHex(secret)), false);
+    assert.equal(publicData.includes(secret.toString()), false);
+  }
+  assert.equal(publicData.includes(input.priceRandomness), false);
 });
 
 test("rejects prices outside either committed private limit", () => {
@@ -180,7 +241,6 @@ test("rejects third-party settlement and leaves the authorized ledger unchanged"
   simulation.authorize();
   assert.throws(() => simulation.settleAsThirdParty(), /assert/i);
   assert.equal(simulation.ledger().status, Negotiation.DealStatus.AUTHORIZED);
-  assert.equal(simulation.ledger().finalPrice, 0n);
 });
 
 test("pins the Seller at deployment and rejects a third-party joinDeal", () => {
@@ -201,7 +261,6 @@ test("rejects third-party authorization and cancellation without changing the le
   assert.throws(() => simulation.cancelAsThirdPartyBuyer(), /caller is not buyer/);
   assert.throws(() => simulation.cancelAsThirdPartySeller(), /caller is not seller/);
   assert.equal(simulation.ledger().status, Negotiation.DealStatus.OPEN);
-  assert.equal(simulation.ledger().finalPrice, 0n);
 });
 
 test("lets the pinned Seller cancel before joining, which closes the deal", () => {

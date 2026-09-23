@@ -611,9 +611,12 @@ export class IsolatedRuntimeController {
       return;
     }
     if (event.state === "SETTLED") {
+      // The chain no longer publishes the price. The amount shown to the
+      // parties comes from the Buyer outcome, and each party runtime reopens
+      // the public price commitment with its own opening below.
       const agreedAmount = this.#pendingSettlements.get(event.sessionId);
-      if (agreedAmount === undefined || event.publicAmount !== agreedAmount) {
-        throw new Error("indexed settlement does not match negotiated amount");
+      if (agreedAmount === undefined) {
+        throw new Error("indexed settlement has no negotiated amount");
       }
       if (!this.#chainAuthorizedSessions.has(event.sessionId)) {
         this.#chainAuthorizedSessions.add(event.sessionId);
@@ -640,6 +643,15 @@ export class IsolatedRuntimeController {
         occurredAt: event.occurredAt,
       });
       this.#pendingSettlements.delete(event.sessionId);
+      for (const target of ["buyer", "seller"] as const) {
+        this.#send({
+          protocolVersion: PROTOCOL_VERSION,
+          type: "VERIFY_SETTLEMENT",
+          requestId: createRequestId(),
+          target,
+          sessionId: event.sessionId,
+        });
+      }
     }
   }
 
@@ -975,7 +987,6 @@ export class IsolatedRuntimeController {
         "SETTLED",
         "OBSERVER_SETTLED",
         occurredAt,
-        message.agreedAmount,
       );
     });
   }
@@ -985,7 +996,6 @@ export class IsolatedRuntimeController {
     state: "OPEN" | "AUTHORIZED" | "SETTLED" | "CANCELLED",
     messageCode: string,
     occurredAt: string,
-    publicAmount?: string,
   ): void {
     if (!this.#observerSessions.has(sessionId)) return;
     this.#send({
@@ -997,7 +1007,6 @@ export class IsolatedRuntimeController {
       state,
       messageCode,
       occurredAt,
-      ...(publicAmount === undefined ? {} : { publicAmount }),
     });
   }
 

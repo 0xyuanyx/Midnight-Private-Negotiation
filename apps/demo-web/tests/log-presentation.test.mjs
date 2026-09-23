@@ -31,10 +31,9 @@ test("uses Korean-first labels while preserving exact public protocol identifier
     presentation.messageFor(
       event("OBSERVER_SETTLED", {
         state: "SETTLED",
-        publicAmount: "100000",
       }),
     ),
-    "거래 확정 · SETTLED · 100,000 KRW",
+    "거래 확정 · SETTLED · 금액 비공개",
   );
   assert.equal(
     presentation.messageFor(
@@ -58,12 +57,16 @@ test("keeps round counts and transaction identifiers out of every mapped log", (
     "PROOFS_COMPLETE",
     "FINALIZING_SETTLEMENT",
     "ONCHAIN_RECORDED",
+    "SETTLEMENT_VERIFIED",
+    "OBSERVER_SETTLED",
   ];
   const output = codes
     .map((messageCode) => presentation.messageFor(event(messageCode)))
     .join("\n");
 
   assert.doesNotMatch(output, /\(\d+\/10\)|transaction|tx hash|wallet|block/i);
+  // Settlement copy never carries an amount; only the participant AGREED row does.
+  assert.doesNotMatch(output, /\d[\d,]* KRW/);
   assert.match(output, /AI 에이전트가 비공개 협상을 진행하고 있습니다/);
 });
 
@@ -113,15 +116,23 @@ test("assigns color roles only to private, protocol, success, and danger tokens"
   );
 
   const settledTokens = presentation.semanticTokens(
-    "거래 확정 · SETTLED · 100,000 KRW",
+    "거래 확정 · SETTLED · 금액 비공개",
   );
   assert.deepEqual(
-    settledTokens.filter(({ tone }) => tone === "success"),
+    settledTokens.filter(({ tone }) => tone !== "default"),
     [
       { text: "거래 확정", tone: "success" },
       { text: "SETTLED", tone: "success" },
-      { text: "100,000 KRW", tone: "success" },
+      { text: "금액 비공개", tone: "private" },
     ],
+  );
+
+  const agreedTokens = presentation.semanticTokens(
+    "협상 결과 · 합의 · 100,000 KRW",
+  );
+  assert.deepEqual(
+    agreedTokens.filter(({ tone }) => tone === "success"),
+    [{ text: "합의 · 100,000 KRW", tone: "success" }],
   );
 });
 

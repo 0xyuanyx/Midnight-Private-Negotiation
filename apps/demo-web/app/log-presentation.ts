@@ -40,17 +40,20 @@ const messages: Partial<Record<MessageCode, (event: DemoEvent) => string>> = {
     "AI 에이전트의 비공개 협상이 완료되었습니다.",
   VERIFYING: () => "모든 조건을 공개하지 않고 증명하고 있습니다.",
   FINALIZING_SETTLEMENT: () =>
-    "합의 금액을 온체인에 기록하고 있습니다.",
+    "합의 가격 커밋을 온체인에 확정하고 있습니다.",
   FINALIZING_CANCELLATION: () =>
     "협상 결과를 온체인에 반영하고 있습니다.",
   PROOFS_COMPLETE: () => "모든 조건 증명이 완료되었습니다.",
   NEGOTIATION_SETTLED: (event) =>
     `협상 결과 · 합의 · ${Number(event.agreedAmount ?? 0).toLocaleString("ko-KR")} KRW`,
-  ONCHAIN_RECORDED: () => "합의 금액이 온체인에 기록되었습니다.",
+  ONCHAIN_RECORDED: () => "합의가 온체인에 확정되었습니다 · 금액 비공개",
+  SETTLEMENT_VERIFIED: () =>
+    "로컬에 보관한 합의 가격으로 온체인 가격 커밋을 확인했습니다.",
+  SETTLEMENT_VERIFICATION_FAILED: () =>
+    "온체인 가격 커밋이 보관한 합의 가격과 일치하지 않습니다.",
   OBSERVER_AUTHORIZED: () =>
     "가격 조건 승인 · AUTHORIZED · 금액 비공개",
-  OBSERVER_SETTLED: (event) =>
-    `거래 확정 · SETTLED · ${Number(event.publicAmount ?? 0).toLocaleString("ko-KR")} KRW`,
+  OBSERVER_SETTLED: () => "거래 확정 · SETTLED · 금액 비공개",
   NEGOTIATION_CANCELLED: () => "협상 결과 · 결렬",
   OBSERVER_CANCELLED: () => "거래 취소 · CANCELLED · 공개된 금액 없음",
   CHAIN_OPERATION_FAILED: () => "Midnight 거래를 완료하지 못했습니다.",
