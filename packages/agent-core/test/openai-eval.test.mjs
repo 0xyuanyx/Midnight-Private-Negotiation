@@ -27,8 +27,8 @@ test("live evaluation harness settles overlap and cancels non-overlap from publi
   assert.deepEqual(happy, {
     name: "happy-100k",
     result: "SETTLED",
-    agreedAmount: "100750",
-    rounds: 3,
+    agreedAmount: "100000",
+    rounds: 6,
     modelSelections: 2,
   });
 
@@ -44,7 +44,7 @@ test("live evaluation harness settles overlap and cancels non-overlap from publi
   assert.deepEqual(cancelled, {
     name: "cancelled-gap",
     result: "CANCELLED",
-    rounds: 10,
+    rounds: 1,
     modelSelections: 0,
   });
 
@@ -71,10 +71,10 @@ test("live evaluation harness settles overlap and cancels non-overlap from publi
   }
 });
 
-test("balanced fallback keeps the 1,030,000 and 780,550 KRW settlement away from the Seller floor", async () => {
+test("limits far from the public reference end without a limit-shaped offer", async () => {
   const contexts = [];
   const result = await runNegotiationScenario({
-    name: "balanced-1030k-780550",
+    name: "far-from-reference-1030k-780550",
     buyerLimit: 1030000n,
     sellerLimit: 780550n,
     publicReferencePrice: "100000",
@@ -82,11 +82,13 @@ test("balanced fallback keeps the 1,030,000 and 780,550 KRW settlement away from
     sellerProvider: publicProvider(contexts),
   });
 
+  // Offers come only from the public ladder around the reference price, so a
+  // Seller minimum above the whole ladder ends the deal instead of leaking it.
   assert.deepEqual(result, {
-    name: "balanced-1030k-780550",
-    result: "SETTLED",
-    agreedAmount: "897750",
+    name: "far-from-reference-1030k-780550",
+    result: "CANCELLED",
     rounds: 1,
-    modelSelections: 2,
+    modelSelections: 0,
   });
+  assert.equal(JSON.stringify(contexts).includes("780"), false);
 });

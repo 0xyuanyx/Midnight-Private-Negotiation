@@ -9,10 +9,11 @@ import {
   generateAllowedCandidate,
   generateLocalFallbackCandidate,
   isOfferPriceIncrementValid,
-  localTargetPrice,
+  MAX_NEGOTIATION_ROUNDS,
   NEGOTIATION_PROMPT_VERSION,
   PRICE_INCREMENT_KRW,
   policyAllows,
+  publicLadderPrice,
   strategyAllows,
 } from "../dist/index.js";
 
@@ -32,7 +33,7 @@ test("discards off-increment provider offers before a stateless retry", async ()
         return [
           {
             action: "offer",
-            price: calls === 1 ? "90713" : "90750",
+            price: calls === 1 ? "89713" : "89750",
           },
         ];
       },
@@ -41,47 +42,60 @@ test("discards off-increment provider offers before a stateless retry", async ()
       role: "buyer",
       productCode: "4821",
       round: 1,
+      publicReferencePrice: "100000",
     },
     policy: { role: "buyer", maximumPrice: 107000n },
   });
 
-  assert.deepEqual(selected, { action: "offer", price: "90750" });
+  assert.deepEqual(selected, { action: "offer", price: "89750" });
   assert.equal(calls, 2);
 });
 
-test("computes symmetric private concession targets across ten rounds", () => {
-  const buyerPolicy = { role: "buyer", maximumPrice: 1030000n };
-  const sellerPolicy = { role: "seller", minimumPrice: 780550n };
-
-  assert.equal(localTargetPrice(buyerPolicy, 1), 927000n);
-  assert.equal(localTargetPrice(buyerPolicy, 10), 1030000n);
-  assert.equal(localTargetPrice(sellerPolicy, 1), 897750n);
-  assert.equal(localTargetPrice(sellerPolicy, 10), 780750n);
+test("public concession ladder depends only on the reference price and round", () => {
+  assert.equal(MAX_NEGOTIATION_ROUNDS, 10);
+  assert.equal(publicLadderPrice("buyer", "100000", 1), 90000n);
+  assert.equal(publicLadderPrice("buyer", "100000", 6), 100000n);
+  assert.equal(publicLadderPrice("buyer", "100000", 10), 108000n);
+  assert.equal(publicLadderPrice("seller", "100000", 1), 110000n);
+  assert.equal(publicLadderPrice("seller", "100000", 6), 100000n);
+  assert.equal(publicLadderPrice("seller", "100000", 10), 92000n);
+  assert.equal(publicLadderPrice("buyer", "100001", 1), 90000n);
+  assert.equal(publicLadderPrice("seller", "100001", 1), 110250n);
+  assert.equal(publicLadderPrice("buyer", "100000", 11), undefined);
 });
 
-test("Seller StrategyGuard rejects the floor and accepts the round target", () => {
-  const policy = { role: "seller", minimumPrice: 780550n };
-  const context = {
+test("Seller StrategyGuard follows the public ladder and never goes below its limit", () => {
+  const policy = { role: "seller", minimumPrice: 95000n };
+  const context = (round, price) => ({
     role: "seller",
     productCode: "1111",
-    round: 1,
-    currentOffer: { maker: "buyer", price: "780750" },
-  };
+    round,
+    publicReferencePrice: "100000",
+    currentOffer: { maker: "buyer", price },
+  });
 
   assert.equal(
-    strategyAllows(policy, context, { action: "accept", price: "780750" }),
+    strategyAllows(policy, context(1, "100000"), { action: "accept", price: "100000" }),
     false,
   );
   assert.equal(
-    strategyAllows(
-      policy,
-      {
-        ...context,
-        currentOffer: { maker: "buyer", price: "897750" },
-      },
-      { action: "accept", price: "897750" },
-    ),
+    strategyAllows(policy, context(6, "100000"), { action: "accept", price: "100000" }),
     true,
+  );
+  assert.equal(
+    strategyAllows(policy, context(10, "94000"), { action: "accept", price: "94000" }),
+    false,
+  );
+});
+
+test("StrategyGuard refuses to act without a public reference price", () => {
+  assert.equal(
+    strategyAllows(
+      { role: "buyer", maximumPrice: 200000n },
+      { role: "buyer", productCode: "1111", round: 1 },
+      { action: "offer", price: "1000" },
+    ),
+    false,
   );
 });
 
@@ -414,48 +428,74 @@ test("deterministic GPT mock proposes a natural 250 KRW increment without receiv
       role: "buyer",
       productCode: "4821",
       round: 1,
+      publicReferencePrice: "100000",
     },
     policy: { role: "buyer", maximumPrice: 110000n },
   });
 
-  assert.deepEqual(selected, { action: "offer", price: "90750" });
+  assert.deepEqual(selected, { action: "offer", price: "90000" });
 });
 
-test("Buyer and Seller mock agents can counter and accept through local guards", async () => {
+test("Buyer and Seller mock agents meet on the public ladder through local guards", async () => {
   const provider = createDeterministicMockProvider();
-  const sellerGenerated = await generateAllowedCandidate({
+  const sellerCounter = await generateAllowedCandidate({
     provider,
     context: {
       role: "seller",
       productCode: "4821",
-      round: 1,
-      currentOffer: { maker: "buyer", price: "100000" },
+      round: 5,
+      publicReferencePrice: "100000",
+      currentOffer: { maker: "buyer", price: "98000" },
     },
-    policy: { role: "seller", minimumPrice: 115000n },
+    policy: { role: "seller", minimumPrice: 95000n },
   });
-  assert.equal(sellerGenerated, undefined);
-  const sellerCounter = generateLocalFallbackCandidate({
-    context: {
-      role: "seller",
-      productCode: "4821",
-      round: 1,
-      currentOffer: { maker: "buyer", price: "100000" },
-    },
-    policy: { role: "seller", minimumPrice: 115000n },
-  });
-  assert.deepEqual(sellerCounter, { action: "offer", price: "132250" });
+  assert.deepEqual(sellerCounter, { action: "offer", price: "102000" });
 
-  const buyerAcceptance = await generateAllowedCandidate({
+  const buyerCounter = await generateAllowedCandidate({
     provider,
     context: {
       role: "buyer",
       productCode: "4821",
-      round: 1,
-      currentOffer: { maker: "seller", price: "132250" },
+      round: 5,
+      publicReferencePrice: "100000",
+      currentOffer: { maker: "seller", price: "102000" },
     },
-    policy: { role: "buyer", maximumPrice: 150000n },
+    policy: { role: "buyer", maximumPrice: 110000n },
   });
-  assert.deepEqual(buyerAcceptance, { action: "accept", price: "132250" });
+  assert.deepEqual(buyerCounter, { action: "offer", price: "100000" });
+
+  const sellerAcceptance = await generateAllowedCandidate({
+    provider,
+    context: {
+      role: "seller",
+      productCode: "4821",
+      round: 6,
+      publicReferencePrice: "100000",
+      currentOffer: { maker: "buyer", price: "100000" },
+    },
+    policy: { role: "seller", minimumPrice: 95000n },
+  });
+  assert.deepEqual(sellerAcceptance, { action: "accept", price: "100000" });
+});
+
+test("Seller declines instead of clamping when the ladder is below its limit", async () => {
+  const context = {
+    role: "seller",
+    productCode: "4821",
+    round: 1,
+    publicReferencePrice: "100000",
+    currentOffer: { maker: "buyer", price: "90000" },
+  };
+  const policy = { role: "seller", minimumPrice: 115000n };
+  assert.equal(
+    await generateAllowedCandidate({
+      provider: createDeterministicMockProvider(),
+      context,
+      policy,
+    }),
+    undefined,
+  );
+  assert.equal(generateLocalFallbackCandidate({ context, policy }), undefined);
 });
 
 test("mock provider rejects a context carrying a private field", async () => {
@@ -480,7 +520,7 @@ test("invalid provider output is discarded before a stateless retry", async () =
       calls += 1;
       return calls === 1
         ? [{ action: "leak", price: "1" }]
-        : [{ action: "offer", price: "98750" }];
+        : [{ action: "offer", price: "89750" }];
     },
   };
 
@@ -490,83 +530,82 @@ test("invalid provider output is discarded before a stateless retry", async () =
       role: "buyer",
       productCode: "4821",
       round: 1,
+      publicReferencePrice: "100000",
     },
     policy: { role: "buyer", maximumPrice: 110000n },
   });
 
-  assert.deepEqual(selected, { action: "offer", price: "98750" });
+  assert.deepEqual(selected, { action: "offer", price: "89750" });
   assert.equal(calls, 2);
   assert.deepEqual(received[1], received[0]);
 });
 
-test("local fallback completes overlapping high-value limits without exposing them to the provider", async () => {
-  const received = [];
-  const provider = {
-    async generateCandidates(context) {
-      received.push(structuredClone(context));
-      return [
-        { action: "accept", price: context.currentOffer.price },
-        { action: "offer", price: "115000" },
-      ];
-    },
+test("fallback offers do not reveal the private limit (regression for the 2026-09-23 inference)", () => {
+  const context = {
+    role: "buyer",
+    productCode: "4821",
+    round: 1,
+    publicReferencePrice: "100000000",
   };
+  // The old fallback sent 90% of the private limit, so 81,000,000 narrowed
+  // the Buyer limit to 90,000,000-90,000,277.
+  const offers = [90000000n, 90000277n, 95000000n, 110000000n, 1000000000n].map(
+    (maximumPrice) =>
+      generateLocalFallbackCandidate({
+        context,
+        policy: { role: "buyer", maximumPrice },
+      }),
+  );
+  for (const offer of offers) {
+    assert.deepEqual(offer, { action: "offer", price: "90000000" });
+  }
+  assert.equal(
+    generateLocalFallbackCandidate({
+      context,
+      policy: { role: "buyer", maximumPrice: 89999999n },
+    }),
+    undefined,
+  );
+
   const sellerContext = {
     role: "seller",
-    productCode: "1111",
-    round: 1,
-    currentOffer: { maker: "buyer", price: "100000" },
+    productCode: "4821",
+    round: 3,
+    publicReferencePrice: "100000000",
+    currentOffer: { maker: "buyer", price: "94000000" },
   };
-  const sellerPolicy = { role: "seller", minimumPrice: 700000n };
-
-  const generated = await generateAllowedCandidate({
-    provider,
-    context: sellerContext,
-    policy: sellerPolicy,
-  });
-  assert.equal(generated, undefined);
-
-  const counter = generateLocalFallbackCandidate({
-    context: sellerContext,
-    policy: sellerPolicy,
-  });
-  assert.deepEqual(counter, { action: "offer", price: "805000" });
-  assert.equal(JSON.stringify(received).includes("700000"), false);
-  assert.equal(JSON.stringify(received).includes("minimumPrice"), false);
-
-  const buyerAcceptance = await generateAllowedCandidate({
-    provider: createDeterministicMockProvider(),
-    context: {
-      role: "buyer",
-      productCode: "1111",
-      round: 1,
-      currentOffer: { maker: "seller", price: "805000" },
-    },
-    policy: { role: "buyer", maximumPrice: 1000000n },
-  });
-  assert.deepEqual(buyerAcceptance, { action: "accept", price: "805000" });
+  for (const minimumPrice of [80000000n, 95000000n, 106000000n]) {
+    assert.deepEqual(
+      generateLocalFallbackCandidate({
+        context: sellerContext,
+        policy: { role: "seller", minimumPrice },
+      }),
+      { action: "offer", price: "106000000" },
+    );
+  }
 });
 
-test("local fallback rounds Buyer down and Seller up to a safe 250 KRW increment", () => {
+test("local fallback rounds the public ladder Buyer down and Seller up to 250 KRW", () => {
   const buyerOffer = generateLocalFallbackCandidate({
     context: {
       role: "buyer",
       productCode: "4821",
       round: 1,
-      publicReferencePrice: "100000",
+      publicReferencePrice: "100001",
     },
     policy: { role: "buyer", maximumPrice: 107000n },
   });
-  assert.deepEqual(buyerOffer, { action: "offer", price: "96250" });
+  assert.deepEqual(buyerOffer, { action: "offer", price: "90000" });
 
   const sellerOffer = generateLocalFallbackCandidate({
     context: {
       role: "seller",
       productCode: "4821",
       round: 1,
-      publicReferencePrice: "100000",
+      publicReferencePrice: "100001",
       currentOffer: { maker: "buyer", price: "75000" },
     },
     policy: { role: "seller", minimumPrice: 77100n },
   });
-  assert.deepEqual(sellerOffer, { action: "offer", price: "88750" });
+  assert.deepEqual(sellerOffer, { action: "offer", price: "110250" });
 });

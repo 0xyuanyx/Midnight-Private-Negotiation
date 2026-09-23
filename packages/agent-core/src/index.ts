@@ -44,7 +44,7 @@ export type LocalPolicy =
 const MAX_KRW = 18_446_744_073_709_551_615n;
 const MAX_CANDIDATES = 5;
 export const PRICE_INCREMENT_KRW = 250n;
-export const NEGOTIATION_PROMPT_VERSION = "2026-07-28.v3";
+export const NEGOTIATION_PROMPT_VERSION = "2026-09-23.v4";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -152,7 +152,7 @@ const COMMON_NEGOTIATION_INSTRUCTIONS = `
 const BUYER_NEGOTIATION_INSTRUCTIONS = `
 [BUYER 역할]
 - 구매자의 목표는 성급하게 높은 가격을 확정하지 않으면서도, 합의 가능성이 있는 거래를 놓치지 않는 것이다.
-- 첫 공개 제안은 보통 publicReferencePrice의 약 90.75%에서 시작하고 250 KRW 단위로 맞춘다. 이후 후보는 공개 기준가 방향으로 점진적으로 배치한다.
+- 공개 규칙: 구매자의 N라운드 제안 상한은 publicReferencePrice × (90% + 2%p × (N-1))을 250 KRW 단위로 내림한 값이다. 첫 공개 제안은 이 상한 이하에서 만든다.
 - 판매자의 공개 제안이 있으면 수락 후보를 먼저 만들고, 그보다 낮은 counter offer 후보들을 현재 제안에 가까운 값부터 점진적으로 만든다.
 - 공개 제안과 라운드 흐름을 존중하며 가격을 올릴 때는 작은 단계로 신중하게 조정한다.
 - 구매자의 실제 최대 한도를 알고 있는 것처럼 말하거나, 후보 가격을 최대 한도 또는 최종 가격이라고 설명하지 않는다.
@@ -162,6 +162,7 @@ const BUYER_NEGOTIATION_INSTRUCTIONS = `
 const SELLER_NEGOTIATION_INSTRUCTIONS = `
 [SELLER 역할]
 - 판매자의 목표는 성급하게 낮은 가격을 확정하지 않으면서도, 합의 가능성이 있는 거래를 놓치지 않는 것이다.
+- 공개 규칙: 판매자의 N라운드 제안 하한은 publicReferencePrice × (110% - 2%p × (N-1))을 250 KRW 단위로 올림한 값이다. counter offer는 이 하한 이상에서 만든다.
 - 구매자의 공개 제안이 있으면 수락 후보를 먼저 만들고, 그보다 높은 counter offer 후보들을 현재 제안에 가까운 값부터 점진적으로 만든다.
 - 공개 제안과 라운드 흐름을 존중하며 가격을 내릴 때는 작은 단계로 신중하게 조정한다.
 - 판매자의 실제 최소 금액을 알고 있는 것처럼 말하거나, 후보 가격을 최소 금액 또는 최종 가격이라고 설명하지 않는다.
@@ -364,29 +365,56 @@ const roundUpToPriceIncrement = (price: bigint): bigint | undefined => {
     : undefined;
 };
 
-export const localTargetPrice = (
-  policy: LocalPolicy,
+export const MAX_NEGOTIATION_ROUNDS = 10;
+const LADDER_STEP_BASIS_POINTS = 200n;
+const BUYER_LADDER_START_BASIS_POINTS = 9_000n;
+const SELLER_LADDER_START_BASIS_POINTS = 11_000n;
+
+// The public concession ladder depends only on the public reference price, the
+// role, and the round. Private limits never shape an outgoing price; they only
+// decide whether a ladder price or an incoming offer may be used.
+export const publicLadderPrice = (
+  role: AgentRole,
+  rawReferencePrice: string,
   round: number,
 ): bigint | undefined => {
-  if (!Number.isInteger(round) || round < 1 || round > 10) return undefined;
-  const progress = BigInt(round - 1);
-  if (policy.role === "buyer") {
-    const basisPoints = 9_000n + (progress * 1_000n) / 9n;
+  const referencePrice = parsePrice(rawReferencePrice);
+  if (
+    referencePrice === undefined ||
+    !Number.isInteger(round) ||
+    round < 1 ||
+    round > MAX_NEGOTIATION_ROUNDS
+  ) {
+    return undefined;
+  }
+  const step = BigInt(round - 1) * LADDER_STEP_BASIS_POINTS;
+  if (role === "buyer") {
     return roundDownToPriceIncrement(
-      (policy.maximumPrice * basisPoints) / 10_000n,
+      (referencePrice * (BUYER_LADDER_START_BASIS_POINTS + step)) / 10_000n,
     );
   }
-  const basisPoints = 11_500n - (progress * 1_500n) / 9n;
   return roundUpToPriceIncrement(
-    (policy.minimumPrice * basisPoints) / 10_000n,
+    (referencePrice * (SELLER_LADDER_START_BASIS_POINTS - step)) / 10_000n,
   );
 };
 
-const scalePrice = (price: bigint, basisPoints: bigint): string => {
-  const scaled = (price * basisPoints) / 10_000n;
-  const safe = scaled < 1n ? 1n : scaled > MAX_KRW ? MAX_KRW : scaled;
-  return (roundDownToPriceIncrement(safe) ?? PRICE_INCREMENT_KRW).toString();
-};
+// The round in which this party's next counter offer would be sent. Buyer
+// counters move to the next round; Seller counters stay in the Buyer's round.
+const nextOfferRound = (context: PublicNegotiationContext): number =>
+  context.role === "buyer" && context.currentOffer !== undefined
+    ? context.round + 1
+    : context.round;
+
+const publicStrategyTarget = (
+  context: PublicNegotiationContext,
+): bigint | undefined =>
+  context.publicReferencePrice === undefined
+    ? undefined
+    : publicLadderPrice(
+        context.role,
+        context.publicReferencePrice,
+        Math.min(nextOfferRound(context), MAX_NEGOTIATION_ROUNDS),
+      );
 
 const uniqueCandidates = (
   candidates: readonly NegotiationCandidate[],
@@ -422,37 +450,25 @@ export const createDeterministicMockProvider = (
       if (referencePrice === undefined) {
         throw new Error("mock reference price must be a positive uint64 amount");
       }
-      if (context.currentOffer === undefined) {
-        if (context.role !== "buyer") {
-          throw new Error("only Buyer can create the opening mock offer");
-        }
-        return uniqueCandidates(
-          [9_075n, 9_325n, 9_575n, 9_825n, 10_000n].map(
-            (basisPoints): NegotiationCandidate => ({
-              action: "offer",
-              price: scalePrice(referencePrice, basisPoints),
-            }),
-          ),
-        );
+      if (context.currentOffer === undefined && context.role !== "buyer") {
+        throw new Error("only Buyer can create the opening mock offer");
       }
-
-      const accept: NegotiationCandidate = {
-        action: "accept",
-        price: context.currentOffer.price,
-      };
-      const counterBasisPoints =
-        context.role === "buyer"
-          ? ([10_000n, 9_725n, 9_475n, 9_075n] as const)
-          : ([10_000n, 10_525n, 11_075n, 11_525n] as const);
-      return uniqueCandidates([
-        accept,
-        ...counterBasisPoints.map(
-          (basisPoints): NegotiationCandidate => ({
-            action: "offer",
-            price: scalePrice(referencePrice, basisPoints),
-          }),
-        ),
-      ]);
+      const offerRound = nextOfferRound(context);
+      const counterPrice =
+        offerRound > MAX_NEGOTIATION_ROUNDS
+          ? undefined
+          : publicLadderPrice(context.role, referencePrice.toString(), offerRound);
+      const candidates: NegotiationCandidate[] = [];
+      if (context.currentOffer !== undefined) {
+        candidates.push({ action: "accept", price: context.currentOffer.price });
+      }
+      if (counterPrice !== undefined) {
+        candidates.push({ action: "offer", price: counterPrice.toString() });
+      }
+      if (candidates.length === 0) {
+        throw new Error("mock provider has no public candidate for this round");
+      }
+      return uniqueCandidates(candidates);
     },
   };
 };
@@ -524,7 +540,7 @@ export const strategyAllows = (
   const context = validatePublicContext(rawContext);
   if (!policyAllows(policy, context, candidate)) return false;
   const price = parsePrice(candidate.price);
-  const target = localTargetPrice(policy, context.round);
+  const target = publicStrategyTarget(context);
   if (price === undefined || target === undefined) return false;
   return policy.role === "buyer" ? price <= target : price >= target;
 };
@@ -594,11 +610,24 @@ export const generateLocalFallbackCandidate = (input: {
     return undefined;
   }
 
-  const price = localTargetPrice(input.policy, context.round);
+  const offerRound = nextOfferRound(context);
+  if (
+    context.publicReferencePrice === undefined ||
+    offerRound > MAX_NEGOTIATION_ROUNDS
+  ) {
+    return undefined;
+  }
+  const price = publicLadderPrice(
+    context.role,
+    context.publicReferencePrice,
+    offerRound,
+  );
   if (price === undefined) return undefined;
   const offer: NegotiationCandidate = {
     action: "offer",
     price: price.toString(),
   };
+  // Never clamp to the private limit: if the public ladder price is outside
+  // the limit, stop instead of sending a limit-shaped price.
   return strategyAllows(input.policy, context, offer) ? offer : undefined;
 };

@@ -366,7 +366,7 @@ test("syncs an existing Buyer commitment before a late Seller enters a limit", a
 
     controller.setLimit("buyer", {
       sessionId: "room-6248",
-      limitKrw: "500000",
+      limitKrw: "110000",
     });
     await waitFor(
       controller,
@@ -405,10 +405,10 @@ test("syncs an existing Buyer commitment before a late Seller enters a limit", a
     );
     controller.setLimit("seller", {
       sessionId: "room-6248",
-      limitKrw: "300000",
+      limitKrw: "95000",
     });
     const result = await settled;
-    assert.equal(result.publicAmount, "345000");
+    assert.equal(result.publicAmount, "100000");
     assert.equal(
       events.some(
         (event) =>
@@ -423,7 +423,7 @@ test("syncs an existing Buyer commitment before a late Seller enters a limit", a
   }
 });
 
-test("settles overlapping 1,000,000 and 700,000 KRW limits without an external AI key", async () => {
+test("settles overlapping 110,000 and 95,000 KRW limits without an external AI key", async () => {
   const controller = new IsolatedRuntimeController();
   try {
     await controller.start();
@@ -443,7 +443,7 @@ test("settles overlapping 1,000,000 and 700,000 KRW limits without an external A
 
     controller.setLimit("buyer", {
       sessionId: "room-1111",
-      limitKrw: "1000000",
+      limitKrw: "110000",
     });
     await waitFor(
       controller,
@@ -459,11 +459,11 @@ test("settles overlapping 1,000,000 and 700,000 KRW limits without an external A
     );
     controller.setLimit("seller", {
       sessionId: "room-1111",
-      limitKrw: "700000",
+      limitKrw: "95000",
     });
 
     const event = await settled;
-    assert.equal(event.publicAmount, "805000");
+    assert.equal(event.publicAmount, "100000");
   } finally {
     await controller.shutdown();
   }
