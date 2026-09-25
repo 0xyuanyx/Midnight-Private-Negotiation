@@ -352,3 +352,18 @@ midnight-fact-check fast-check로 README와 제출 양식 초안에서 Midnight�
 | 웹 `npm ci`·테스트 | 8/8 |
 | `npm run demo:local -- --keep-chain`, 성공 시연 110,000,000 / 95,000,000 | Observer `OPEN → AUTHORIZED → SETTLED · 금액 비공개`. 양측 증빙이 지정한 데이터 폴더에 저장되고 두 세션 기록 모두 거래 ID를 가진 채 `CLEANED` |
 | 앱 종료(`Ctrl+C`, 체인 유지) 뒤 `npm run evidence -- verify` | 양측 증빙 복호화, 네트워크·계약 버전·거래 ID·`SETTLED`·가격 commitment 일치, 종료 코드 0 |
+
+## 2026-09-26 거래별 비공개 가격 오프셋
+
+변경: `packages/agent-core`의 `deriveSessionPriceOffset`, 오프셋 좌표 변환(`generateAllowedCandidate`·`generateLocalFallbackCandidate`의 `priceOffset`), Buyer·Seller 런타임 연결. 이유와 남는 추론은 PROJECT_DIRECTION.md 2026-09-26 항목.
+
+| 항목 | 결과 |
+|---|---|
+| 자동 테스트 | 루트 74/74(오프셋 양측 일치·범위·잘못된 입력 거절, 한도와 무관한 제안 가격, AI 입력의 오프셋 제거, 실제 한도 재검사, 새 런타임 세션 6회에서 합의 가격이 모두 같지 않음 포함), 웹 8/8, `typecheck` |
+| 로컬 체인 성공 | `demo:local --keep-chain --openai`, Buyer 110,000,000 / Seller 95,000,000 → `OPEN → AUTHORIZED → SETTLED · 금액 비공개`. 양측 패널 합의 가격 101,333,250 KRW 일치, 양측 가격 커밋 확인·증빙 보관·정리 로그 |
+| 앱 종료 후 증빙 | `npm run evidence -- verify`(파일 키 저장소): 양측 복호화 성공, 네트워크·계약 버전·거래 ID 일치, `SETTLED`, 가격 커밋 일치 |
+| 공개 데이터 검사 | Indexer GraphQL에서 해당 계약의 트랜잭션 4건(배포 1, 호출 3) `raw`와 계약 상태에서 101,333,250·110,000,000·95,000,000의 8·16바이트 little/big-endian 16진 인코딩과 10진 ASCII 인코딩을 검색해 모두 없음. 같은 검사에서 계약 주소는 호출 트랜잭션에서 검출됨(검사 방법 대조군) |
+| 로컬 체인 결렬 | 초기화 뒤 Buyer 90,000,000 / Seller 95,000,000 → 양측 `협상 결과 · 결렬`, Observer `CANCELLED · 공개된 금액 없음` |
+
+체인 실행은 코드 줄바꿈 정리 전 빌드로 수행했다. 이후 변경은 서식과 Seller 준비 검사에 `sessionId` 확인을 더한 것뿐이며 테스트·typecheck를 다시 통과했다.
+

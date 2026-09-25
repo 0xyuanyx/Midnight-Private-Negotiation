@@ -329,10 +329,11 @@ test("streams the private negotiation flow from three isolated runtimes", async 
       (event) => event.messageCode === "NEGOTIATION_SETTLED",
     );
     assert.equal(participantAgreement.length, 2);
+    assert.equal(participantAgreement[0].agreedAmount, participantAgreement[1].agreedAmount);
     assert.ok(
       participantAgreement.every(
         (event) =>
-          event.agreedAmount === "100000" &&
+          BigInt(event.agreedAmount) >= 97000n && BigInt(event.agreedAmount) <= 103000n &&
           event.audience === "PARTICIPANTS",
       ),
     );
@@ -424,7 +425,7 @@ test("syncs an existing Buyer commitment before a late Seller enters a limit", a
         (event) =>
           event.panel === "seller" &&
           event.messageCode === "NEGOTIATION_SETTLED" &&
-          event.agreedAmount === "100000",
+          BigInt(event.agreedAmount) >= 97000n && BigInt(event.agreedAmount) <= 103000n,
       ),
     );
     assert.equal(
@@ -487,7 +488,7 @@ test("settles overlapping 110,000 and 95,000 KRW limits without an external AI k
 
     const [event, agreement] = await Promise.all([settled, agreed]);
     assert.equal("publicAmount" in event, false);
-    assert.equal(agreement.agreedAmount, "100000");
+    assert.ok(BigInt(agreement.agreedAmount) >= 97000n && BigInt(agreement.agreedAmount) <= 103000n);
     assert.equal(agreement.audience, "PARTICIPANTS");
   } finally {
     await controller.shutdown();
@@ -573,4 +574,35 @@ test("skips proof and settlement states when private limits do not overlap", asy
     unsubscribe();
     await controller.shutdown();
   }
+});
+
+test('fresh runtime sessions can settle at different prices under the same public inputs', async () => {
+  const prices=[];
+  for(let i=0;i<6;i++) {
+    const controller=new IsolatedRuntimeController();
+    const events=[];
+    const unsubscribe=controller.onDemoEvent(event=>events.push(event));
+    const sessionId=`room-offset-${i}`;
+    try {
+      await controller.start();
+      const joined=waitFor(controller,e=>e.panel==='buyer'&&e.messageCode==='SELLER_JOINED');
+      controller.joinRoom('buyer',{sessionId,productCode:'4821'});
+      controller.joinRoom('seller',{sessionId,productCode:'4821'});
+      await joined;
+      const settled=waitFor(controller,e=>e.panel==='observer'&&e.messageCode==='OBSERVER_SETTLED');
+      controller.setLimit('buyer',{sessionId,limitKrw:'110000'});
+      controller.setLimit('seller',{sessionId,limitKrw:'95000'});
+      await settled;
+      const results=events.filter(e=>e.messageCode==='NEGOTIATION_SETTLED');
+      assert.equal(results.length,2);
+      assert.equal(results[0].agreedAmount,results[1].agreedAmount);
+      const amount=BigInt(results[0].agreedAmount);
+      assert.ok(amount>=97000n&&amount<=103000n);
+      assert.equal(amount%250n,0n);
+      assert.ok(events.filter(e=>e.audience==='PUBLIC').every(e=>!('agreedAmount' in e)&&!('priceOffset' in e)));
+      prices.push(results[0].agreedAmount);
+    } finally {unsubscribe();await controller.shutdown();}
+  }
+  // With 25 equiprobable offsets, accidental equality of all six is < 1e-7.
+  assert.ok(new Set(prices).size>1,`all fresh sessions settled at ${prices[0]}`);
 });

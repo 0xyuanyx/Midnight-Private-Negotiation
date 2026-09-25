@@ -23,6 +23,7 @@ import {
 } from "@midnight-negotiation/room-relay";
 import {
   createCandidateProviderFromEnvironment,
+  deriveSessionPriceOffset,
   generateAllowedCandidate,
   generateLocalFallbackCandidate,
   type NegotiationCandidate,
@@ -640,11 +641,23 @@ const generateAndExecute = async (
     ...context,
     publicReferencePrice,
   };
+  const priceOffset = deriveSessionPriceOffset({
+    sharedKey,
+    sessionId,
+    productCode,
+    publicReferencePrice,
+  });
   const candidate = (await generateAllowedCandidate({
     provider: candidateProvider,
+    priceOffset,
     context: publicContext,
     policy,
-  })) ?? generateLocalFallbackCandidate({ context: publicContext, policy });
+  })) ??
+    generateLocalFallbackCandidate({
+      context: publicContext,
+      policy,
+      priceOffset,
+    });
   if (candidate === undefined) {
     publishOutcome({ result: "CANCELLED" });
     return;

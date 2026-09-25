@@ -23,6 +23,7 @@ import {
 } from "@midnight-negotiation/room-relay";
 import {
   createCandidateProviderFromEnvironment,
+  deriveSessionPriceOffset,
   generateAllowedCandidate,
   generateLocalFallbackCandidate,
   type NegotiationCandidate,
@@ -548,6 +549,7 @@ const respondToProposal = async (input: {
   price: string;
 }): Promise<void> => {
   if (
+    sessionId === undefined ||
     productCode === undefined ||
     sellerMinPrice === undefined ||
     sharedKey === undefined ||
@@ -569,11 +571,18 @@ const respondToProposal = async (input: {
     role,
     minimumPrice: sellerMinPrice,
   } as const;
+  const priceOffset = deriveSessionPriceOffset({
+    sharedKey,
+    sessionId,
+    productCode,
+    publicReferencePrice,
+  });
   const candidate = (await generateAllowedCandidate({
     provider: candidateProvider,
+    priceOffset,
     context,
     policy,
-  })) ?? generateLocalFallbackCandidate({ context, policy });
+  })) ?? generateLocalFallbackCandidate({ context, policy, priceOffset });
   if (candidate === undefined) {
     relay({
       kind: "decline",

@@ -1,3 +1,5 @@
+import { hkdfSync } from "node:crypto";
+
 export type AgentRole = "buyer" | "seller";
 
 export type PublicOffer = {
@@ -545,12 +547,145 @@ export const strategyAllows = (
   return policy.role === "buyer" ? price <= target : price >= target;
 };
 
+// Each negotiation session shifts the public ladder by a private offset that
+// only Buyer and Seller can derive. Without it, every agreement would land on
+// the public reference price and an Observer could name the settled price.
+const PRIVATE_OFFSET_BASIS_POINTS = 300n;
+
+const maxPrivateOffset = (reference: bigint): bigint =>
+  (reference * PRIVATE_OFFSET_BASIS_POINTS) / 10_000n;
+
+// HKDF uses a separate domain from relay encryption. Rejection sampling avoids
+// modulo bias. The shared key is freshly established for each runtime session;
+// this value is never sent, logged, persisted, or given to the model.
+export const deriveSessionPriceOffset = (input: {
+  sharedKey: Uint8Array;
+  sessionId: string;
+  productCode: string;
+  publicReferencePrice: string;
+}): bigint => {
+  const reference = parsePrice(input.publicReferencePrice);
+  if (
+    input.sharedKey.length !== 32 ||
+    reference === undefined ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(input.sessionId) ||
+    !/^\d{4}$/.test(input.productCode)
+  ) {
+    throw new Error("invalid session price context");
+  }
+  const steps = maxPrivateOffset(reference) / PRICE_INCREMENT_KRW;
+  const count = steps * 2n + 1n;
+  const space = 1n << 256n;
+  const ceiling = space - (space % count);
+  for (let attempt = 0; ; attempt += 1) {
+    const bytes = Buffer.from(
+      hkdfSync(
+        "sha256",
+        input.sharedKey,
+        Buffer.from("midnight-private-price-offset-v1", "utf8"),
+        Buffer.from(
+          JSON.stringify([
+            input.sessionId,
+            input.productCode,
+            input.publicReferencePrice,
+            attempt,
+          ]),
+          "utf8",
+        ),
+        32,
+      ),
+    );
+    const sample = BigInt(`0x${bytes.toString("hex")}`);
+    bytes.fill(0);
+    if (sample < ceiling) {
+      return ((sample % count) - steps) * PRICE_INCREMENT_KRW;
+    }
+  }
+};
+
+// An additive offset changes only the local price coordinate. Neither limits
+// nor the offset enter provider requests. Existing ladder/AI behavior operates
+// in normalized coordinates; relay and contract amounts remain actual KRW.
+const normalizePrivatePrices = (
+  context: PublicNegotiationContext,
+  policy: LocalPolicy,
+  priceOffset: bigint,
+): { context: PublicNegotiationContext; policy: LocalPolicy } | undefined => {
+  validatePublicContext(context);
+  const reference = parsePrice(context.publicReferencePrice);
+  if (
+    reference === undefined ||
+    typeof priceOffset !== "bigint" ||
+    priceOffset % PRICE_INCREMENT_KRW !== 0n ||
+    priceOffset < -maxPrivateOffset(reference) ||
+    priceOffset > maxPrivateOffset(reference)
+  ) {
+    return undefined;
+  }
+  let normalizedContext = context;
+  if (context.currentOffer !== undefined) {
+    const normalizedOffer = (
+      BigInt(context.currentOffer.price) - priceOffset
+    ).toString();
+    if (parsePrice(normalizedOffer) === undefined) return undefined;
+    normalizedContext = {
+      ...context,
+      currentOffer: { ...context.currentOffer, price: normalizedOffer },
+    };
+  }
+  return {
+    context: normalizedContext,
+    policy:
+      policy.role === "buyer"
+        ? { role: "buyer", maximumPrice: policy.maximumPrice - priceOffset }
+        : { role: "seller", minimumPrice: policy.minimumPrice - priceOffset },
+  };
+};
+
+// The restored price is checked against the actual private limit again, so a
+// translation mistake stops the negotiation instead of crossing a limit.
+const restorePrivatePrice = (
+  candidate: NegotiationCandidate | undefined,
+  context: PublicNegotiationContext,
+  policy: LocalPolicy,
+  priceOffset: bigint,
+): NegotiationCandidate | undefined => {
+  if (candidate === undefined) return undefined;
+  const actual: NegotiationCandidate = {
+    action: candidate.action,
+    price: (BigInt(candidate.price) + priceOffset).toString(),
+  };
+  return policyAllows(policy, context, actual) ? actual : undefined;
+};
+
 export const generateAllowedCandidate = async (input: {
   provider: CandidateProvider;
   context: PublicNegotiationContext;
   policy: LocalPolicy;
   maxStatelessRequests?: number;
+  priceOffset?: bigint;
 }): Promise<NegotiationCandidate | undefined> => {
+  if (input.priceOffset !== undefined) {
+    const normalized = normalizePrivatePrices(
+      input.context,
+      input.policy,
+      input.priceOffset,
+    );
+    if (normalized === undefined) return undefined;
+    const candidate = await generateAllowedCandidate({
+      provider: input.provider,
+      ...normalized,
+      ...(input.maxStatelessRequests === undefined
+        ? {}
+        : { maxStatelessRequests: input.maxStatelessRequests }),
+    });
+    return restorePrivatePrice(
+      candidate,
+      input.context,
+      input.policy,
+      input.priceOffset,
+    );
+  }
   const context = validatePublicContext(input.context);
   const maxStatelessRequests = input.maxStatelessRequests ?? 3;
   if (
@@ -596,7 +731,22 @@ export const generateAllowedCandidate = async (input: {
 export const generateLocalFallbackCandidate = (input: {
   context: PublicNegotiationContext;
   policy: LocalPolicy;
+  priceOffset?: bigint;
 }): NegotiationCandidate | undefined => {
+  if (input.priceOffset !== undefined) {
+    const normalized = normalizePrivatePrices(
+      input.context,
+      input.policy,
+      input.priceOffset,
+    );
+    if (normalized === undefined) return undefined;
+    return restorePrivatePrice(
+      generateLocalFallbackCandidate(normalized),
+      input.context,
+      input.policy,
+      input.priceOffset,
+    );
+  }
   const context = validatePublicContext(input.context);
   if (context.role !== input.policy.role) return undefined;
 
